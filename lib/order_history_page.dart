@@ -212,6 +212,31 @@ class OrderHistoryPage extends StatelessWidget {
                                       ),
                                     ],
                                   ),
+                                  if (order['shippingMethod'] != null) ...[
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.local_shipping_rounded,
+                                          size: 16,
+                                          color: Color(0xFF94A3B8),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            order['shippingMethod'] as String,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF6B7280),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),

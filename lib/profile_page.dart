@@ -1,9 +1,18 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_ui.dart';
+import 'edit_profile_page.dart';
+import 'help_page.dart';
 import 'login_page.dart';
+import 'my_address_page.dart';
+import 'my_businesses_page.dart';
 import 'my_products_page.dart';
+import 'order_history_page.dart';
+import 'payment_method_page.dart';
+import 'profile_model.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -13,8 +22,27 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  final _profileModel = ProfileModel.instance;
   bool _isDarkMode = false;
   bool _isNotificationEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileModel.addListener(_onProfileChanged);
+  }
+
+  @override
+  void dispose() {
+    _profileModel.removeListener(_onProfileChanged);
+    super.dispose();
+  }
+
+  void _onProfileChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   Future<void> _handleLogout() async {
     try {
@@ -64,24 +92,57 @@ class _ProfilePageState extends State<ProfilePage> {
                 _ModernCard(
                   child: Column(
                     children: [
-                      const _MenuItemTile(
+                      _MenuItemTile(
                         icon: Icons.person,
                         title: 'Edit Profile',
+                        onTap: () async {
+                          final result = await Navigator.of(context).push(
+                            buildPageRoute(const EditProfilePage()),
+                          );
+                          if (result == true && mounted) {
+                            setState(() {});
+                          }
+                        },
                       ),
                       const _MenuDivider(),
-                      const _MenuItemTile(
+                      _MenuItemTile(
                         icon: Icons.location_on,
                         title: 'Alamat Saya',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            buildPageRoute(const MyAddressPage()),
+                          );
+                        },
                       ),
                       const _MenuDivider(),
-                      const _MenuItemTile(
+                      _MenuItemTile(
                         icon: Icons.payment,
                         title: 'Metode Pembayaran',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            buildPageRoute(const PaymentMethodPage()),
+                          );
+                        },
                       ),
                       const _MenuDivider(),
-                      const _MenuItemTile(
+                      _MenuItemTile(
                         icon: Icons.receipt_long,
                         title: 'Riwayat Pesanan',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            buildPageRoute(const OrderHistoryPage()),
+                          );
+                        },
+                      ),
+                      const _MenuDivider(),
+                      _MenuItemTile(
+                        icon: Icons.business,
+                        title: 'Bisnis Saya',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            buildPageRoute(const MyBusinessesPage()),
+                          );
+                        },
                       ),
                       const _MenuDivider(),
                       _MenuItemTile(
@@ -94,9 +155,14 @@ class _ProfilePageState extends State<ProfilePage> {
                         },
                       ),
                       const _MenuDivider(),
-                      const _MenuItemTile(
+                      _MenuItemTile(
                         icon: Icons.help_outline,
                         title: 'Bantuan',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            buildPageRoute(const HelpPage()),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -156,10 +222,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Isabel • isabel@email.com',
+                Text(
+                  '${_profileModel.name} • ${_profileModel.email}',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: secondaryTextColor,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -185,6 +251,7 @@ class _ProfileHeaderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     const primaryTextColor = Color(0xFF111827);
     const secondaryTextColor = Color(0xFF64748B);
+    final profileModel = ProfileModel.instance;
 
     return _ModernCard(
       child: Row(
@@ -194,11 +261,13 @@ class _ProfileHeaderCard extends StatelessWidget {
             height: avatarSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                colors: [Color(0xFFDBEAFE), Color(0xFFE0E7FF)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              gradient: profileModel.hasProfileImage()
+                  ? null
+                  : const LinearGradient(
+                      colors: [Color(0xFFDBEAFE), Color(0xFFE0E7FF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
               border: Border.all(color: const Color(0xFFF1F5F9), width: 2),
               boxShadow: [
                 BoxShadow(
@@ -207,37 +276,45 @@ class _ProfileHeaderCard extends StatelessWidget {
                   offset: const Offset(0, 8),
                 ),
               ],
+              image: profileModel.hasProfileImage()
+                  ? DecorationImage(
+                      image: FileImage(File(profileModel.profileImagePath!)),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
             ),
-            child: const Icon(
-              Icons.person_rounded,
-              size: 34,
-              color: Color(0xFF2563EB),
-            ),
+            child: profileModel.hasProfileImage()
+                ? null
+                : const Icon(
+                    Icons.person_rounded,
+                    size: 34,
+                    color: Color(0xFF2563EB),
+                  ),
           ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Isabel',
-                  style: TextStyle(
+                  profileModel.name,
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                     color: primaryTextColor,
                   ),
                 ),
-                SizedBox(height: 6),
+                const SizedBox(height: 6),
                 Text(
-                  'isabel@email.com',
-                  style: TextStyle(
+                  profileModel.email,
+                  style: const TextStyle(
                     fontSize: 14,
                     color: secondaryTextColor,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                SizedBox(height: 10),
-                _ProfileChip(label: 'Premium Member'),
+                const SizedBox(height: 10),
+                const _ProfileChip(label: 'Premium Member'),
               ],
             ),
           ),

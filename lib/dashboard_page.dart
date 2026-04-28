@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_ui.dart';
 import 'app_ui_skeletons.dart';
+import 'business_detail_page.dart';
+import 'business_model.dart';
 import 'cart_model.dart';
 import 'shop_image.dart';
 import 'cart_page.dart';
@@ -90,6 +92,7 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
+
 }
 
 class _DashboardHomeTab extends StatefulWidget {
@@ -112,6 +115,7 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
   ];
 
   List<Map<String, dynamic>> filteredProducts = [];
+  List<Map<String, dynamic>> filteredBusinesses = [];
 
   final Set<int> _favoriteIndexes = <int>{1, 3};
   int selectedCategoryIndex = 0;
@@ -228,6 +232,23 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
 
         return matchSearch && matchCategory && matchFilterCategory && matchPrice;
       }).toList();
+      
+      // Filter businesses based on search query
+      final allBusinesses = BusinessModel.instance.getAllBusinesses();
+      if (query.isEmpty) {
+        filteredBusinesses = [];
+      } else {
+        filteredBusinesses = allBusinesses.where((business) {
+          final name = (business['name'] as String? ?? '').toLowerCase();
+          final description = (business['description'] as String? ?? '').toLowerCase();
+          final city = (business['city'] as String? ?? '').toLowerCase();
+          final province = (business['province'] as String? ?? '').toLowerCase();
+          return name.contains(query) ||
+              description.contains(query) ||
+              city.contains(query) ||
+              province.contains(query);
+        }).toList();
+      }
     });
   }
 
@@ -454,6 +475,22 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
               children: [
                 _buildSearchBar(context),
                 const SizedBox(height: 16),
+                // Business search results
+                if (filteredBusinesses.isNotEmpty) ...[
+                  _buildSectionHeader('Bisnis Ditemukan', trailing: '${filteredBusinesses.length}'),
+                  const SizedBox(height: 12),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: filteredBusinesses.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final business = filteredBusinesses[index];
+                      return _buildBusinessCard(context, business);
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                ],
                 _buildPromoBanner(context),
                 const SizedBox(height: 24),
                 _buildSectionHeader('Kategori'),
@@ -997,6 +1034,115 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF4B5563),
                   ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBusinessCard(BuildContext context, Map<String, dynamic> business) {
+    return TapScale(
+      onTap: () {
+        Navigator.of(context).push(
+          buildPageRoute(BusinessDetailPage(business: business)),
+        );
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6C7BFF), Color(0xFF8F7CF8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.business_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      business['name'] as String? ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on_rounded,
+                          size: 14,
+                          color: Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            '${business['city'] ?? ''}, ${business['province'] ?? ''}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEEF2FF),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${(business['products'] as List? ?? []).length} Produk',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF4338CA),
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 14,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],

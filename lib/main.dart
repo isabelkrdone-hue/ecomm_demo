@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 
 import 'app_keys.dart';
+import 'notification_service.dart';
+import 'profile_model.dart';
 import 'splash_page.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize notification service
+  await NotificationService.instance.initialize();
+  await NotificationService.instance.requestPermissions();
+  
+  // Initialize profile model
+  await ProfileModel.instance.loadProfile();
+  
   runApp(const MyApp());
 }
 

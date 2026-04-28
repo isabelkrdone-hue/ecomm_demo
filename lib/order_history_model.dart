@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'app_ui.dart';
 import 'cart_model.dart';
+import 'notification_service.dart';
 
 class OrderHistoryModel extends ChangeNotifier {
   OrderHistoryModel._privateConstructor();
@@ -31,6 +32,8 @@ class OrderHistoryModel extends ChangeNotifier {
     required List<Map<String, dynamic>> products,
     required int totalPrice,
     required String paymentMethod,
+    String? shippingMethod,
+    int? shippingCost,
   }) {
     final now = DateTime.now();
     final orderId = _generateOrderId(now);
@@ -45,6 +48,8 @@ class OrderHistoryModel extends ChangeNotifier {
       'totalHarga': totalPrice,
       'status': 'Diproses',
       'paymentMethod': normalizedPaymentMethod,
+      'shippingMethod': shippingMethod,
+      'shippingCost': shippingCost ?? 0,
       'products': products
           .map((product) => Map<String, dynamic>.from(product))
           .toList(),
@@ -87,6 +92,14 @@ class OrderHistoryModel extends ChangeNotifier {
       icon: Icons.verified_rounded,
       backgroundColor: const Color(0xFF16A34A),
     );
+    
+    // Show Android notification
+    NotificationService.instance.showOrderStatusNotification(
+      orderId: orderId,
+      status: 'Selesai',
+      message: 'Pesanan #$orderId telah berhasil dikirim. Terima kasih telah berbelanja!',
+    );
+    
     _statusTokens.remove(orderId);
   }
 
