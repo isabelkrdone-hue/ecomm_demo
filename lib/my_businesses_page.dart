@@ -181,8 +181,11 @@ class _MyBusinessesPageState extends State<MyBusinessesPage> {
                     spacing: 8,
                     runSpacing: 8,
                     children: (business['products'] as List? ?? []).map((product) {
+                      final productName = product is Map<String, dynamic>
+                          ? (product['name'] as String? ?? '-')
+                          : product.toString();
                       return Chip(
-                        label: Text(product as String),
+                        label: Text(productName),
                         backgroundColor: const Color(0xFFEEF2FF),
                         labelStyle: const TextStyle(
                           color: Color(0xFF4338CA),

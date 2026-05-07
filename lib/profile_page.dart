@@ -13,6 +13,7 @@ import 'my_products_page.dart';
 import 'order_history_page.dart';
 import 'payment_method_page.dart';
 import 'profile_model.dart';
+import 'seller_center_page.dart' show SellerCenterPage;
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -131,6 +132,16 @@ class _ProfilePageState extends State<ProfilePage> {
                         onTap: () {
                           Navigator.of(context).push(
                             buildPageRoute(const OrderHistoryPage()),
+                          );
+                        },
+                      ),
+                      const _MenuDivider(),
+                      _MenuItemTile(
+                        icon: Icons.storefront_rounded,
+                        title: 'Seller Center',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            buildPageRoute(const SellerCenterPage()),
                           );
                         },
                       ),

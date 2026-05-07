@@ -23,7 +23,16 @@ class CartModel extends ChangeNotifier {
 
   void addToCart(Map<String, dynamic> product) {
     final copiedProduct = Map<String, dynamic>.from(product);
-    copiedProduct['priceValue'] = _parsePrice(copiedProduct['price']);
+    copiedProduct['name'] = _asString(copiedProduct['name'], fallback: '-');
+    copiedProduct['price'] = _asPriceLabel(copiedProduct['price']);
+    copiedProduct['image'] = _asString(
+      copiedProduct['image'] ?? copiedProduct['imagePath'],
+      fallback: 'assets/images/placeholder.png',
+    );
+    copiedProduct['category'] = _asString(copiedProduct['category'], fallback: 'Lainnya');
+    copiedProduct['description'] = _asString(copiedProduct['description'], fallback: '');
+    copiedProduct['businessName'] = _asString(copiedProduct['businessName'], fallback: '');
+    copiedProduct['priceValue'] = _parsePrice(copiedProduct['priceValue'] ?? copiedProduct['price']);
     _items.add(copiedProduct);
     notifyListeners();
   }
@@ -47,6 +56,17 @@ class CartModel extends ChangeNotifier {
     final text = value?.toString() ?? '';
     final digitsOnly = text.replaceAll(RegExp(r'[^0-9]'), '');
     return int.tryParse(digitsOnly) ?? 0;
+  }
+
+  String _asString(dynamic value, {required String fallback}) {
+    if (value == null) return fallback;
+    if (value is String) return value;
+    return value.toString();
+  }
+
+  String _asPriceLabel(dynamic value) {
+    final parsed = _parsePrice(value);
+    return formatPrice(parsed);
   }
 
   static String formatPrice(int value) {

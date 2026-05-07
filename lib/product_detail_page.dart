@@ -13,10 +13,16 @@ class ProductDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final String name = product['name'] as String? ?? '-';
-    final String price = product['price'] as String? ?? '-';
-    final String imageUrl = product['image'] as String? ?? '';
-    final String description =
-        product['description'] as String? ?? 'Deskripsi produk belum tersedia.';
+    final priceValue = product['price'];
+    final String price = priceValue is num
+        ? CartModel.formatPrice(priceValue.toInt())
+        : (priceValue?.toString() ?? '-');
+    final String imageUrl =
+        (product['image'] as String? ?? product['imagePath'] as String? ?? '');
+    final String description = product['description'] as String? ??
+        (product['businessName'] != null
+            ? 'Produk dari ${product['businessName']}'
+            : 'Deskripsi produk belum tersedia.');
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),

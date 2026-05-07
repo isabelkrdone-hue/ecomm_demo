@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 
+import 'app_ui.dart';
 import 'order_history_model.dart';
+import 'review_page.dart';
 
-class OrderDetailPage extends StatelessWidget {
+class OrderDetailPage extends StatefulWidget {
   const OrderDetailPage({super.key, this.order, this.orderId});
 
   final Map<String, dynamic>? order;
   final String? orderId;
+
+  @override
+  State<OrderDetailPage> createState() => _OrderDetailPageState();
+}
+
+class _OrderDetailPageState extends State<OrderDetailPage> {
 
   Color _statusColor(String status) {
     switch (status) {
@@ -87,9 +95,23 @@ class OrderDetailPage extends StatelessWidget {
   }
 
   Map<String, dynamic>? _resolveOrder() {
-    if (order != null) return order;
-    if (orderId == null) return null;
-    return OrderHistoryModel.instance.getOrderById(orderId!);
+    if (widget.order != null) return widget.order;
+    if (widget.orderId == null) return null;
+    return OrderHistoryModel.instance.getOrderById(widget.orderId!);
+  }
+
+  String _asString(dynamic value, {String fallback = '-'}) {
+    if (value == null) return fallback;
+    if (value is String) return value;
+    return value.toString();
+  }
+
+  int _asPrice(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    final text = value?.toString() ?? '';
+    final digits = text.replaceAll(RegExp(r'[^0-9]'), '');
+    return int.tryParse(digits) ?? 0;
   }
 
   @override
@@ -121,13 +143,16 @@ class OrderDetailPage extends StatelessWidget {
           }
 
           final products = (orderData['products'] as List<dynamic>? ?? const [])
-              .cast<Map<String, dynamic>>();
-          final status = orderData['status'] as String? ?? '-';
+              .map((item) => item is Map<String, dynamic>
+                  ? item
+                  : <String, dynamic>{'name': item.toString()})
+              .toList();
+          final status = _asString(orderData['status']);
           final tanggal = orderData['date'] as DateTime? ?? orderData['tanggal'] as DateTime? ?? DateTime.now();
-          final totalHarga = orderData['total'] as int? ?? orderData['totalHarga'] as int? ?? 0;
-          final nomorResi = orderData['nomorResi'] as String? ?? '-';
-          final nomorPesanan = orderData['id'] as String? ?? '-';
-          final paymentMethodRaw = orderData['paymentMethod'] as String?;
+          final totalHarga = _asPrice(orderData['total'] ?? orderData['totalHarga']);
+          final nomorResi = _asString(orderData['nomorResi']);
+          final nomorPesanan = _asString(orderData['id']);
+          final paymentMethodRaw = orderData['paymentMethod']?.toString();
           final paymentMethodLabel = _paymentMethodLabel(paymentMethodRaw);
           final paymentMethodIcon = _paymentMethodIcon(paymentMethodRaw);
           final currentIndex = _statusIndex(status);
@@ -334,7 +359,7 @@ class OrderDetailPage extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    orderData['shippingMethod'] as String,
+                                    _asString(orderData['shippingMethod']),
                                     style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w800,
@@ -344,7 +369,7 @@ class OrderDetailPage extends StatelessWidget {
                                   if (orderData['shippingCost'] != null) ...[
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Ongkir: ${OrderHistoryModel.formatPrice(orderData['shippingCost'] as int)}',
+                                      'Ongkir: ${OrderHistoryModel.formatPrice(_asPrice(orderData['shippingCost']))}',
                                       style: const TextStyle(
                                         fontSize: 13,
                                         color: Color(0xFF6B7280),
@@ -404,22 +429,22 @@ class OrderDetailPage extends StatelessWidget {
                             ClipRRect(
                               borderRadius: BorderRadius.circular(16),
                               child: Image.network(
-                                product['image'] as String? ?? '',
-                                width: 72,
-                                height: 72,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    width: 72,
-                                    height: 72,
-                                    color: const Color(0xFFF1F5F9),
-                                    alignment: Alignment.center,
-                                    child: const Icon(
-                                      Icons.image_rounded,
-                                      color: Color(0xFF94A3B8),
-                                    ),
-                                  );
-                                },
+                              _asString(product['image'], fallback: ''),
+                              width: 72,
+                              height: 72,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: 72,
+                                  height: 72,
+                                  color: const Color(0xFFF1F5F9),
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.image_rounded,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                );
+                              },
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -428,7 +453,7 @@ class OrderDetailPage extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    product['name'] as String? ?? '-',
+                                    _asString(product['name']),
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w700,
                                       fontSize: 15,
@@ -436,7 +461,7 @@ class OrderDetailPage extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    product['price'] as String? ?? '-',
+                                    _asString(product['price']),
                                     style: const TextStyle(
                                       color: Color(0xFF2563EB),
                                       fontWeight: FontWeight.w700,
@@ -478,6 +503,42 @@ class OrderDetailPage extends StatelessWidget {
                 isActive: currentIndex == 3,
                 isLast: true,
               ),
+              // Review Button for completed orders
+              if (status == 'Selesai') ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        buildPageRoute(
+                          ReviewPage(
+                            orderId: nomorPesanan,
+                            products: products,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.rate_review_rounded),
+                    label: const Text(
+                      'Beri Review',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6C7BFF),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+              ],
             ],
           );
         },

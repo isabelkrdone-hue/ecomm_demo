@@ -47,9 +47,14 @@ class CartPage extends StatelessWidget {
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final item = items[index];
-                    final name = item['name'] as String? ?? '-';
-                    final price = item['price'] as String? ?? '-';
-                    final imageUrl = item['image'] as String? ?? '';
+                    final name = item['name']?.toString() ?? '-';
+                    final priceValue = item['priceValue'] ?? item['price'];
+                    final price = priceValue is num
+                        ? CartModel.formatPrice(priceValue.toInt())
+                        : (priceValue?.toString() ?? '-');
+                    final imageUrl = (item['image'] ?? item['imagePath'] ?? '').toString();
+                    final category = item['category']?.toString() ?? '';
+                    final businessName = item['businessName']?.toString() ?? '';
 
                     return Card(
                       elevation: 0,
@@ -86,6 +91,19 @@ class CartPage extends StatelessWidget {
                                       color: Color(0xFF0F172A),
                                     ),
                                   ),
+                                  const SizedBox(height: 6),
+                                  if (businessName.isNotEmpty || category.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      [if (businessName.isNotEmpty) businessName, if (category.isNotEmpty) category].join(' • '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 6),
                                   Text(
                                     price,
