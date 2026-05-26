@@ -8,12 +8,11 @@ import 'edit_profile_page.dart';
 import 'help_page.dart';
 import 'login_page.dart';
 import 'my_address_page.dart';
-import 'my_businesses_page.dart';
-import 'my_products_page.dart';
 import 'order_history_page.dart';
 import 'payment_method_page.dart';
 import 'profile_model.dart';
 import 'seller_center_page.dart' show SellerCenterPage;
+import 'seller_verification_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -147,21 +146,11 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       const _MenuDivider(),
                       _MenuItemTile(
-                        icon: Icons.business,
-                        title: 'Bisnis Saya',
+                        icon: Icons.verified_user_rounded,
+                        title: 'Verifikasi Seller',
                         onTap: () {
                           Navigator.of(context).push(
-                            buildPageRoute(const MyBusinessesPage()),
-                          );
-                        },
-                      ),
-                      const _MenuDivider(),
-                      _MenuItemTile(
-                        icon: Icons.store,
-                        title: 'Produk Saya',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            buildPageRoute(const MyProductsPage()),
+                            buildPageRoute(const SellerVerificationPage()),
                           );
                         },
                       ),

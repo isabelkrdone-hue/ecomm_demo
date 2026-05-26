@@ -33,6 +33,8 @@ class BusinessModel extends ChangeNotifier {
         copied['businessName'] = businessName;
         copied['businessCity'] = businessCity;
         copied['businessProvince'] = businessProvince;
+        copied['businessVerificationStatus'] = business['verificationStatus'] ?? 'pending';
+        copied['businessVerifiedAt'] = business['verifiedAt'];
         copied['isBusinessProduct'] = true;
         products.add(copied);
       }
@@ -41,14 +43,85 @@ class BusinessModel extends ChangeNotifier {
     return products;
   }
 
+  Map<String, dynamic>? getBusinessByName(String name) {
+    final target = name.trim();
+    if (target.isEmpty) return null;
+
+    for (final business in allBusinesses) {
+      if ((business['name'] as String? ?? '').trim() == target) {
+        return business;
+      }
+    }
+    return null;
+  }
+
   void addBusiness(Map<String, dynamic> business) {
-    allBusinesses.add(Map<String, dynamic>.from(business));
+    final copied = Map<String, dynamic>.from(business);
+    copied['verificationStatus'] = copied['verificationStatus'] ?? 'pending';
+    copied['verificationDocs'] = List<String>.from(copied['verificationDocs'] as List? ?? const []);
+    copied['verificationRequestedAt'] = copied['verificationRequestedAt'] ?? DateTime.now().toIso8601String();
+    copied['verifiedAt'] = copied['verifiedAt'];
+    allBusinesses.add(copied);
+    notifyListeners();
+  }
+
+  void requestVerification(int index, {List<String> documents = const []}) {
+    if (index < 0 || index >= allBusinesses.length) return;
+
+    final business = allBusinesses[index];
+    final currentDocs = List<String>.from(business['verificationDocs'] as List? ?? const []);
+    currentDocs.addAll(documents.where((doc) => doc.trim().isNotEmpty));
+
+    business['verificationDocs'] = currentDocs;
+    business['verificationStatus'] = 'pending';
+    business['verificationRequestedAt'] = DateTime.now().toIso8601String();
+    business['verifiedAt'] = null;
+    notifyListeners();
+  }
+
+  void completeVerification(int index) {
+    if (index < 0 || index >= allBusinesses.length) return;
+
+    final business = allBusinesses[index];
+    business['verificationStatus'] = 'verified';
+    business['verifiedAt'] = DateTime.now().toIso8601String();
+    notifyListeners();
+  }
+
+  String getVerificationLabel(Map<String, dynamic> business) {
+    final status = (business['verificationStatus'] as String? ?? 'pending').toLowerCase();
+    switch (status) {
+      case 'verified':
+        return 'Terverifikasi';
+      case 'processing':
+        return 'Sedang diverifikasi';
+      case 'rejected':
+        return 'Ditolak';
+      default:
+        return 'Menunggu verifikasi';
+    }
+  }
+
+  bool isVerified(Map<String, dynamic> business) {
+    return (business['verificationStatus'] as String? ?? 'pending').toLowerCase() == 'verified';
+  }
+
+  bool get hasVerifiedBusiness => allBusinesses.any(isVerified);
+
+  void markVerificationProcessing(int index) {
+    if (index < 0 || index >= allBusinesses.length) return;
+    allBusinesses[index]['verificationStatus'] = 'processing';
     notifyListeners();
   }
 
   void updateBusiness(int index, Map<String, dynamic> business) {
     if (index >= 0 && index < allBusinesses.length) {
-      allBusinesses[index] = Map<String, dynamic>.from(business);
+      final copied = Map<String, dynamic>.from(business);
+      copied['verificationStatus'] = copied['verificationStatus'] ?? allBusinesses[index]['verificationStatus'] ?? 'pending';
+      copied['verificationDocs'] = List<String>.from(copied['verificationDocs'] as List? ?? allBusinesses[index]['verificationDocs'] as List? ?? const []);
+      copied['verificationRequestedAt'] = copied['verificationRequestedAt'] ?? allBusinesses[index]['verificationRequestedAt'];
+      copied['verifiedAt'] = copied['verifiedAt'] ?? allBusinesses[index]['verifiedAt'];
+      allBusinesses[index] = copied;
       notifyListeners();
     }
   }

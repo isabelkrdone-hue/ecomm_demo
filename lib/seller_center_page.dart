@@ -8,6 +8,7 @@ import 'business_model.dart';
 import 'cart_model.dart';
 import 'order_history_model.dart';
 import 'product_data.dart';
+import 'seller_verification_page.dart';
 import 'shop_image.dart';
 
 class SellerCenterPage extends StatefulWidget {
@@ -76,6 +77,24 @@ class _SellerCenterPageState extends State<SellerCenterPage> {
     _refresh();
   }
 
+  Future<void> _openVerification([int? businessIndex]) async {
+    await Navigator.of(context).push(
+      buildPageRoute(
+        SellerVerificationPage(businessIndex: businessIndex),
+      ),
+    );
+    _refresh();
+  }
+
+  int? _firstUnverifiedBusinessIndex() {
+    for (var i = 0; i < _businesses.length; i++) {
+      if (!_businessModel.isVerified(_businesses[i])) return i;
+    }
+    return _businesses.isEmpty ? null : 0;
+  }
+
+  bool get _hasVerifiedBusiness => _businessModel.hasVerifiedBusiness;
+
   @override
   Widget build(BuildContext context) {
     const primary = Color(0xFF2563EB);
@@ -120,8 +139,43 @@ class _SellerCenterPageState extends State<SellerCenterPage> {
                     Row(children: [_stat('Toko', '${_businesses.length}'), const SizedBox(width: 8), _stat('Produk', '${_products.length}')]),
                     const SizedBox(height: 8),
                     Row(children: [_stat('Pesanan', '${_orders.length}'), const SizedBox(width: 8), _stat('Omzet', CartModel.formatPrice(_revenue))]),
-                    const SizedBox(height: 14),
-                    Row(children: [Expanded(child: ElevatedButton.icon(onPressed: _openAddProduct, icon: const Icon(Icons.add_box_rounded), label: const Text('Tambah Produk'), style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: primary))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _openAddStore, icon: const Icon(Icons.store_rounded), label: const Text('Kelola Toko'), style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white70))))]),
+                    const SizedBox(height: 10),
+                    if (!_hasVerifiedBusiness)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.lock_rounded, color: Colors.white, size: 18),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Beberapa fitur seller terkunci sampai toko terverifikasi.',
+                                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _openVerification(_firstUnverifiedBusinessIndex()),
+                        icon: const Icon(Icons.verified_user_rounded),
+                        label: const Text('Verifikasi Seller'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white70),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -175,7 +229,19 @@ class _SellerCenterPageState extends State<SellerCenterPage> {
           child: ListTile(
             leading: ClipRRect(borderRadius: BorderRadius.circular(12), child: SizedBox(width: 56, height: 56, child: ShopImage(imagePath: (p['imagePath'] ?? p['image'] ?? 'assets/images/placeholder.png').toString(), fit: BoxFit.cover))),
             title: Text(p['name'] as String? ?? '-', maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text('${p['category'] ?? 'Lainnya'} • ${p['businessName'] ?? 'Toko kamu'}'),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    _verificationBadgeForProduct(p),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text('${p['category'] ?? 'Lainnya'} • ${p['businessName'] ?? 'Toko kamu'}', maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
             trailing: Text(priceText, style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF2563EB))),
           ),
         );
@@ -197,14 +263,23 @@ class _SellerCenterPageState extends State<SellerCenterPage> {
             onTap: () => Navigator.of(context).push(buildPageRoute(BusinessDetailPage(business: b))),
             leading: const CircleAvatar(child: Icon(Icons.store_rounded)),
             title: Text(b['name'] as String? ?? '-'),
-            subtitle: Text('${b['city'] ?? ''}, ${b['province'] ?? ''} • ${(b['products'] as List? ?? []).length} produk'),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${b['city'] ?? ''}, ${b['province'] ?? ''} • ${(b['products'] as List? ?? []).length} produk'),
+                const SizedBox(height: 6),
+                _verificationChip(b),
+              ],
+            ),
             trailing: PopupMenuButton<String>(
               onSelected: (v) {
                 if (v == 'edit') _openEditStore(b, i);
+                if (v == 'verify') _openVerification(i);
                 if (v == 'delete') _deleteStore(i);
               },
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'edit', child: Text('Edit')),
+                PopupMenuItem(value: 'verify', child: Text('Verifikasi')),
                 PopupMenuItem(value: 'delete', child: Text('Hapus')),
               ],
             ),
@@ -288,11 +363,76 @@ class _SellerCenterPageState extends State<SellerCenterPage> {
       ),
     );
   }
-}
 
-class MyBusinessesPage extends StatelessWidget {
-  const MyBusinessesPage({super.key});
+  Widget _verificationChip(Map<String, dynamic> business) {
+    final status = (business['verificationStatus'] as String? ?? 'pending').toLowerCase();
+    Color color;
+    String label;
+    switch (status) {
+      case 'verified':
+        color = const Color(0xFF16A34A);
+        label = 'Terverifikasi';
+        break;
+      case 'processing':
+        color = const Color(0xFFF59E0B);
+        label = 'Sedang diverifikasi';
+        break;
+      case 'rejected':
+        color = const Color(0xFFDC2626);
+        label = 'Ditolak';
+        break;
+      default:
+        color = const Color(0xFF64748B);
+        label = 'Menunggu verifikasi';
+    }
 
-  @override
-  Widget build(BuildContext context) => const SellerCenterPage();
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+        ),
+      ),
+    );
+  }
+
+  Widget _verificationBadgeForProduct(Map<String, dynamic> product) {
+    final businessName = (product['businessName'] as String? ?? '').trim();
+    final business = businessName.isEmpty ? null : _businessModel.getBusinessByName(businessName);
+    final status = (business?['verificationStatus'] as String? ?? 'pending').toLowerCase();
+
+    Color color;
+    String label;
+    switch (status) {
+      case 'verified':
+        color = const Color(0xFF16A34A);
+        label = 'Terverifikasi';
+        break;
+      case 'processing':
+        color = const Color(0xFFF59E0B);
+        label = 'Proses verifikasi';
+        break;
+      default:
+        color = const Color(0xFF64748B);
+        label = businessName.isEmpty ? 'Produk Pribadi' : 'Menunggu verifikasi';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+      ),
+    );
+  }
 }

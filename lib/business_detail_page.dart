@@ -46,6 +46,52 @@ class _BusinessDetailPageState extends State<BusinessDetailPage> {
     return widget.business;
   }
 
+  String _verificationStatus(Map<String, dynamic> business) {
+    return (business['verificationStatus'] as String? ?? 'pending').toLowerCase();
+  }
+
+  Color _verificationColor(String status) {
+    switch (status) {
+      case 'verified':
+        return const Color(0xFF16A34A);
+      case 'processing':
+        return const Color(0xFFF59E0B);
+      case 'rejected':
+        return const Color(0xFFDC2626);
+      default:
+        return const Color(0xFF64748B);
+    }
+  }
+
+  String _verificationLabel(String status) {
+    switch (status) {
+      case 'verified':
+        return 'Terverifikasi';
+      case 'processing':
+        return 'Sedang diverifikasi';
+      case 'rejected':
+        return 'Ditolak';
+      default:
+        return 'Menunggu verifikasi';
+    }
+  }
+
+  Widget _verificationChip(Map<String, dynamic> business) {
+    final status = _verificationStatus(business);
+    final color = _verificationColor(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        _verificationLabel(status),
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const textColor = Color(0xFF111827);
@@ -220,6 +266,66 @@ class _BusinessDetailPageState extends State<BusinessDetailPage> {
                             icon: Icons.pin_drop_rounded,
                             label: 'Kelurahan',
                             value: business['subDistrict'] as String? ?? '-',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Card(
+                    elevation: 0,
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      side: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Status Verifikasi',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: textColor,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _verificationChip(business),
+                              if (_verificationStatus(business) == 'verified')
+                                const _MiniInfoChip(
+                                  icon: Icons.verified_rounded,
+                                  label: 'Bisa jual produk',
+                                  color: Color(0xFF16A34A),
+                                ),
+                              if (_verificationStatus(business) == 'processing')
+                                const _MiniInfoChip(
+                                  icon: Icons.hourglass_top_rounded,
+                                  label: 'Sedang diproses',
+                                  color: Color(0xFFF59E0B),
+                                ),
+                              if (_verificationStatus(business) == 'pending')
+                                const _MiniInfoChip(
+                                  icon: Icons.lock_rounded,
+                                  label: 'Fitur seller masih terkunci',
+                                  color: Color(0xFF64748B),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Status ini menentukan apakah toko sudah siap dipakai untuk jualan.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                              height: 1.4,
+                            ),
                           ),
                         ],
                       ),
@@ -587,6 +693,40 @@ class _LocationChip extends StatelessWidget {
   }
 }
 
+class _MiniInfoChip extends StatelessWidget {
+  const _MiniInfoChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BusinessProductCard extends StatelessWidget {
   const _BusinessProductCard({required this.product});
 
@@ -625,6 +765,20 @@ class _BusinessProductCard extends StatelessWidget {
     final category = product['category'] as String? ?? '';
     final description = product['description'] as String? ?? 'Produk berkualitas';
     final businessName = product['businessName'] as String? ?? '';
+    final business = businessName.isEmpty ? null : BusinessModel.instance.getBusinessByName(businessName);
+    final status = (business?['verificationStatus'] as String? ?? 'pending').toLowerCase();
+    final statusColor = status == 'verified'
+        ? const Color(0xFF16A34A)
+        : status == 'processing'
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFF64748B);
+    final statusLabel = status == 'verified'
+        ? 'Terverifikasi'
+        : status == 'processing'
+            ? 'Proses verifikasi'
+            : businessName.isEmpty
+                ? 'Produk Pribadi'
+                : 'Menunggu verifikasi';
 
     final detailProduct = {
       'name': product['name'],
@@ -703,6 +857,41 @@ class _BusinessProductCard extends StatelessWidget {
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF4338CA),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          statusLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: statusColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ] else ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Produk Pribadi',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF64748B),
                           ),
                         ),
                       ),

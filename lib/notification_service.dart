@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'app_keys.dart';
 import 'app_ui.dart';
 import 'order_detail_page.dart';
+import 'seller_center_page.dart';
 
 class NotificationService {
   NotificationService._privateConstructor();
@@ -36,18 +37,22 @@ class NotificationService {
   }
 
   void _onNotificationTapped(NotificationResponse response) {
-    // Navigate to order detail page when notification is tapped
-    final orderId = response.payload;
-    if (orderId != null && orderId.isNotEmpty) {
-      final context = rootNavigatorKey.currentContext;
-      if (context != null) {
-        Navigator.of(context).push(
-          buildPageRoute(
-            OrderDetailPage(orderId: orderId),
-          ),
-        );
-      }
+    final payload = response.payload ?? '';
+    final context = rootNavigatorKey.currentContext;
+    if (context == null || payload.isEmpty) return;
+
+    if (payload.startsWith('verification:')) {
+      Navigator.of(context).push(
+        buildPageRoute(const SellerCenterPage()),
+      );
+      return;
     }
+
+    Navigator.of(context).push(
+      buildPageRoute(
+        OrderDetailPage(orderId: payload),
+      ),
+    );
   }
 
   Future<void> showOrderCompletedNotification({
@@ -121,6 +126,49 @@ class NotificationService {
       orderId: orderId,
       title: title,
       body: body,
+    );
+  }
+
+  Future<void> showBusinessVerifiedNotification({
+    required String businessName,
+    String? businessType,
+  }) async {
+    await initialize();
+
+    const androidDetails = AndroidNotificationDetails(
+      'verification_channel',
+      'Verification Notifications',
+      channelDescription: 'Notifications for seller verification updates',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      enableVibration: true,
+      playSound: true,
+      styleInformation: BigTextStyleInformation(''),
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    final typeText = (businessType ?? '').trim();
+    final body = typeText.isEmpty
+        ? '$businessName berhasil lolos verifikasi'
+        : '$businessName ($typeText) berhasil lolos verifikasi';
+
+    await _notifications.show(
+      businessName.hashCode,
+      'Seller terverifikasi',
+      body,
+      details,
+      payload: 'verification:$businessName',
     );
   }
 
