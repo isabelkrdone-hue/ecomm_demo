@@ -7,6 +7,8 @@ import 'app_ui.dart';
 import 'edit_profile_page.dart';
 import 'help_page.dart';
 import 'login_page.dart';
+import 'repository/http.dart';
+import 'package:logger/logger.dart';
 import 'my_address_page.dart';
 import 'order_history_page.dart';
 import 'payment_method_page.dart';
@@ -25,6 +27,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final _profileModel = ProfileModel.instance;
   bool _isDarkMode = false;
   bool _isNotificationEnabled = true;
+  final Logger _logger = Logger();
 
   @override
   void initState() {
@@ -45,14 +48,76 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _handleLogout() async {
+    FocusScope.of(context).unfocus();
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', false);
-    } catch (_) {}
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      buildPageRoute(const LoginPage()),
-    );
+
+      final http = Http();
+      // attach token if available
+      final token = prefs.getString('access_token');
+      if (token != null && token.isNotEmpty) {
+        http.dio.options.headers['Authorization'] = 'Bearer $token';
+        _logger.i('Logout: attached token (length=${token.length})');
+      } else {
+        _logger.w('Logout: no token found in prefs');
+      }
+
+      final res = await http.logout();
+      _logger.i('Logout response: $res');
+
+      // clear local login state regardless of API result to ensure user is logged out locally
+      try {
+        await prefs.setBool('isLoggedIn', false);
+        await prefs.remove('access_token');
+        _logger.i('Cleared local login state and token');
+      } catch (e) {
+        _logger.w('Failed to clear prefs during logout: $e');
+      }
+
+      if (!mounted) return;
+
+      if (res['success'] == true) {
+        showFakeNotification(
+          context,
+          'Logout berhasil',
+          backgroundColor: const Color(0xFF2563EB),
+          icon: Icons.verified_rounded,
+        );
+      } else {
+        final message = res['message'] ?? 'Logout gagal';
+        _logger.w('Logout failed: $message');
+        showFakeNotification(
+          context,
+          message.toString(),
+          backgroundColor: Colors.red,
+          icon: Icons.error,
+        );
+      }
+
+      Navigator.of(context).pushReplacement(
+        buildPageRoute(const LoginPage()),
+      );
+    } catch (e, st) {
+      _logger.e('Logout error: $e\n$st');
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', false);
+        await prefs.remove('access_token');
+        _logger.i('Cleared local login state after error');
+      } catch (err) {
+        _logger.w('Failed to clear prefs after logout error: $err');
+      }
+      if (!mounted) return;
+      showFakeNotification(
+        context,
+        'Terjadi kesalahan saat logout',
+        backgroundColor: Colors.red,
+        icon: Icons.error,
+      );
+      Navigator.of(context).pushReplacement(
+        buildPageRoute(const LoginPage()),
+      );
+    }
   }
 
   @override

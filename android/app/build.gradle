@@ -22,6 +22,15 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
+// Load signing properties from android/key.properties (not checked into VCS)
+def keystorePropertiesFile = rootProject.file('android/key.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withReader('UTF-8') { reader ->
+        keystoreProperties.load(reader)
+    }
+}
+
 android {
     namespace "com.example.ecomm_demo"
         compileSdkVersion 34
@@ -52,7 +61,25 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            // Use the release signing config when a key.properties file is provided,
+            // otherwise fall back to the debug signing config so local builds still work.
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
+        }
+    }
+
+    // Configure the release signing configuration using values from android/key.properties
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+                storePassword keystoreProperties['storePassword']
+            }
         }
     }
 }
@@ -65,4 +92,5 @@ dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
     implementation 'androidx.multidex:multidex:2.0.1'
 }
+
 

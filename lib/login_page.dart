@@ -3,6 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_ui.dart';
 import 'dashboard_page.dart';
+import 'package:logger/logger.dart';
+import 'repository/http.dart';
+import 'sessions.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,6 +19,8 @@ class _LoginPageState extends State<LoginPage> {
   final _userController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _loading = false;
+  final Logger _logger = Logger();
 
   @override
   void dispose() {
@@ -25,22 +30,97 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleLogin() async {
-    if (_formKey.currentState?.validate() ?? false) {
-      FocusScope.of(context).unfocus();
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('isLoggedIn', true);
-      } catch (_) {}
-      if (!mounted) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    FocusScope.of(context).unfocus();
+    setState(() => _loading = true);
+
+    try {
+      final http = Http();
+      _logger.i('Attempting login for: ${_userController.text.trim()}');
+      final res = await http.login(
+        email: _userController.text.trim(),
+        password: _passwordController.text,
+        deviceName: 'flutter',
+      );
+      _logger.i('Login response: $res');
+
+      if (res['success'] == true) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('isLoggedIn', true);
+
+          // save token if available
+          String? token;
+          if (res['data'] is Map && res['data']['token'] != null) {
+            token = res['data']['token'].toString();
+          } else if (res['token'] != null) {
+            token = res['token'].toString();
+          } else if (res['access_token'] != null) {
+            token = res['access_token'].toString();
+          }
+          if (token != null) {
+            await prefs.setString('access_token', token);
+            await Sessions.setToken(token);
+            // set authorization header on singleton Http so subsequent calls (eg. getRoles)
+            // use the newly obtained token immediately
+            Http().dio.options.headers['Authorization'] = 'Bearer $token';
+            _logger.i('Access token saved (length=${token.length})');
+          } else {
+            _logger.w('No access token found in response');
+          }
+
+          // save user if provided
+          if (res['data'] is Map && res['data']['user'] != null) {
+            final userJson = res['data']['user'];
+            try {
+              await Sessions.setUser(userJson is String ? userJson : userJson.toString());
+            } catch (_) {}
+          }
+
+          // fetch roles
+          try {
+            _logger.i('Calling getRoles with Authorization: ${Http().dio.options.headers['Authorization']}');
+            final roles = await http.getRoles();
+            _logger.i('Roles: $roles');
+            if (roles['success'] != true) {
+              _logger.w('getRoles returned non-success: ${roles['message'] ?? roles}');
+            }
+          } catch (e) {
+            _logger.w('Failed to fetch roles: $e');
+          }
+        } catch (_) {}
+
+        if (!mounted) return;
+        showFakeNotification(
+          context,
+          'Login berhasil, selamat berbelanja',
+          backgroundColor: const Color(0xFF2563EB),
+          icon: Icons.verified_rounded,
+        );
+        Navigator.of(context).pushReplacement(
+          buildPageRoute(const DashboardPage()),
+        );
+      } else {
+        final message = res['message'] ?? 'Login gagal';
+        _logger.w('Login failed: $message');
+        showFakeNotification(
+          context,
+          message.toString(),
+          backgroundColor: Colors.red,
+          icon: Icons.error,
+        );
+      }
+    } catch (e) {
+      _logger.e('Login error: $e');
       showFakeNotification(
         context,
-        'Login berhasil, selamat berbelanja',
-        backgroundColor: const Color(0xFF2563EB),
-        icon: Icons.verified_rounded,
+        'Terjadi kesalahan saat login',
+        backgroundColor: Colors.red,
+        icon: Icons.error,
       );
-      Navigator.of(context).pushReplacement(
-        buildPageRoute(const DashboardPage()),
-      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -160,10 +240,21 @@ class _LoginPageState extends State<LoginPage> {
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                               ),
-                              child: const Text(
-                                'Login',
-                                style: TextStyle(fontSize: 16),
-                              ),
+                            child: _loading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Login',
+                                    style: TextStyle(fontSize: 16),
+                                  ),
                             ),
                           ),
                         ],

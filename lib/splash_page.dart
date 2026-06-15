@@ -4,6 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_ui.dart';
 import 'dashboard_page.dart';
 import 'login_page.dart';
+import 'repository/http.dart';
+import 'sessions.dart';
+import 'package:logger/logger.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -46,6 +49,7 @@ class _SplashPageState extends State<SplashPage>
   }
 
   Future<void> _checkLoginAndNavigate() async {
+    final logger = Logger();
     bool isLoggedIn = false;
 
     try {
@@ -57,10 +61,41 @@ class _SplashPageState extends State<SplashPage>
 
     if (!mounted) return;
 
+    if (isLoggedIn) {
+      // verify session token before allowing direct access to dashboard
+      try {
+        final token = await Sessions.getToken();
+        if (token != null && token.isNotEmpty) {
+          Http().dio.options.headers['Authorization'] = 'Bearer $token';
+          logger.i('Splash: verifying token via getRoles');
+          final res = await Http().getRoles();
+          logger.i('Splash: verify result: $res');
+          if (res['success'] == true) {
+            Navigator.of(context).pushReplacement(
+              buildPageRoute(const DashboardPage()),
+            );
+            return;
+          }
+        }
+      } catch (e) {
+        logger.w('Splash: verification failed: $e');
+      }
+
+      // verification failed — clear local session and go to login
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', false);
+        await prefs.remove('access_token');
+      } catch (_) {}
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        buildPageRoute(const LoginPage()),
+      );
+      return;
+    }
+
     Navigator.of(context).pushReplacement(
-      buildPageRoute(
-        isLoggedIn ? const DashboardPage() : const LoginPage(),
-      ),
+      buildPageRoute(const LoginPage()),
     );
   }
 

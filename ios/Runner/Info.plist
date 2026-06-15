@@ -4,8 +4,10 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<key>CFBundleDisplayName</key>
-	<string>Ecomm Demo</string>
+    <key>CFBundleDisplayName</key>
+    <string>Ecomm Demo</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.yourcompany.ecomm_demo</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

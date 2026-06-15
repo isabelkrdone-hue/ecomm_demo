@@ -4,6 +4,8 @@ import 'app_keys.dart';
 import 'notification_service.dart';
 import 'profile_model.dart';
 import 'splash_page.dart';
+import 'sessions.dart';
+import 'repository/http.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +16,11 @@ void main() async {
   
   // Initialize profile model
   await ProfileModel.instance.loadProfile();
+  // set Authorization header from saved session token (if any)
+  final token = await Sessions.getToken();
+  if (token != null && token.isNotEmpty) {
+    Http().dio.options.headers['Authorization'] = 'Bearer $token';
+  }
   
   runApp(const MyApp());
 }
@@ -107,6 +114,7 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
 
 
 
