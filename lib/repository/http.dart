@@ -668,4 +668,176 @@ class Http {
       };
     }
   }
+
+  Future<Map<String, dynamic>> getAlamatPengiriman({
+    bool isActive = true,
+    int perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'alamat-pengiriman',
+        queryParameters: {
+          'is_active': isActive,
+          'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getAlamatPengirimanDetail(
+    String id,
+  ) async {
+    try {
+      final response = await dio.get(
+        'alamat-pengiriman/$id',
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> createAlamatPengiriman({
+    required String penerima,
+    required String phone,
+    required String alamat,
+    required String provinsi,
+    required String kota,
+    required String kecamatan,
+    required String desa,
+    required String kodePos,
+    bool isDefault = false,
+    bool isActive = true,
+  }) async {
+    try {
+      final response = await dio.post(
+        'alamat-pengiriman',
+        data: {
+          'penerima': penerima,
+          'phone': phone,
+          'alamat': alamat,
+          'provinsi': provinsi,
+          'kota': kota,
+          'kecamatan': kecamatan,
+          'desa': desa,
+          'kode_pos': kodePos,
+          'is_default': isDefault,
+          'is_active': isActive,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> updateAlamatPengiriman({
+    required String id,
+    required String penerima,
+    required String phone,
+    required String alamat,
+    required String provinsi,
+    required String kota,
+    required String kecamatan,
+    required String desa,
+    required String kodePos,
+    bool isDefault = false,
+    bool isActive = true,
+  }) async {
+    try {
+      final response = await dio.put(
+        'alamat-pengiriman/$id',
+        data: {
+          'penerima': penerima,
+          'phone': phone,
+          'alamat': alamat,
+          'provinsi': provinsi,
+          'kota': kota,
+          'kecamatan': kecamatan,
+          'desa': desa,
+          'kode_pos': kodePos,
+          'is_default': isDefault,
+          'is_active': isActive,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> deleteAlamatPengiriman(
+    String id,
+  ) async {
+    try {
+      final response = await dio.delete(
+        'alamat-pengiriman/$id',
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getEkspedisi({
+    bool isActive = true,
+    int perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'ekspedisi',
+        queryParameters: {
+          'is_active': isActive,
+          'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getEkspedisiDetail(
+    String id,
+  ) async {
+    try {
+      final response = await dio.get(
+        'ekspedisi/$id',
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
 }
