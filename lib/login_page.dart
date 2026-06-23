@@ -50,22 +50,28 @@ class _LoginPageState extends State<LoginPage> {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('isLoggedIn', true);
 
-          // save token if available
-          String? token;
-          if (res['data'] is Map && res['data']['token'] != null) {
-            token = res['data']['token'].toString();
-          } else if (res['token'] != null) {
-            token = res['token'].toString();
-          } else if (res['access_token'] != null) {
-            token = res['access_token'].toString();
-          }
-          if (token != null) {
-            await prefs.setString('access_token', token);
-            await Sessions.setToken(token);
-            // set authorization header on singleton Http so subsequent calls (eg. getRoles)
-            // use the newly obtained token immediately
-            Http().dio.options.headers['Authorization'] = 'Bearer $token';
-            _logger.i('Access token saved (length=${token.length})');
+          if (http.token != null && http.token!.isNotEmpty) {
+            await Sessions.setLoginSession(
+              token: http.token!,
+              userId: http.userId ?? '',
+              name: http.name ?? '',
+              email: http.email ?? '',
+              phone: http.phone ?? '',
+              roleId: http.roleId ?? '',
+              role: http.role ?? '',
+            );
+            http.setToken(http.token!);
+            final savedSession = await Sessions.getLoginSession();
+            _logger.i(
+              'Login sukses, session tersimpan: '
+              'tokenLength=${savedSession['token']?.length ?? 0}, '
+              'userId=${savedSession['userId']}, '
+              'name=${savedSession['name']}, '
+              'email=${savedSession['email']}, '
+              'phone=${savedSession['phone']}, '
+              'roleId=${savedSession['roleId']}, '
+              'role=${savedSession['role']}',
+            );
           } else {
             _logger.w('No access token found in response');
           }
@@ -74,22 +80,28 @@ class _LoginPageState extends State<LoginPage> {
           if (res['data'] is Map && res['data']['user'] != null) {
             final userJson = res['data']['user'];
             try {
-              await Sessions.setUser(userJson is String ? userJson : userJson.toString());
+              await Sessions.setUser(
+                userJson is String ? userJson : userJson.toString(),
+              );
             } catch (_) {}
           }
 
           // fetch roles
           try {
-            _logger.i('Calling getRoles with Authorization: ${Http().dio.options.headers['Authorization']}');
+            _logger.i(
+                'Calling getRoles with Authorization: ${http.dio.options.headers['Authorization']}');
             final roles = await http.getRoles();
             _logger.i('Roles: $roles');
             if (roles['success'] != true) {
-              _logger.w('getRoles returned non-success: ${roles['message'] ?? roles}');
+              _logger.w(
+                  'getRoles returned non-success: ${roles['message'] ?? roles}');
             }
           } catch (e) {
             _logger.w('Failed to fetch roles: $e');
           }
-        } catch (_) {}
+        } catch (e, st) {
+          _logger.e('Failed to save login session: $e\n$st');
+        }
 
         if (!mounted) return;
         showFakeNotification(
@@ -161,7 +173,8 @@ class _LoginPageState extends State<LoginPage> {
                             height: 72,
                             width: 72,
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withOpacity(0.12),
+                              color:
+                                  theme.colorScheme.primary.withOpacity(0.12),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -192,7 +205,8 @@ class _LoginPageState extends State<LoginPage> {
                             keyboardType: TextInputType.text,
                             decoration: const InputDecoration(
                               labelText: 'User / Email',
-                              hintText: 'Masukkan username, email, atau teks apa pun',
+                              hintText:
+                                  'Masukkan username, email, atau teks apa pun',
                               prefixIcon: Icon(Icons.person_outline),
                             ),
                             validator: (value) {
@@ -240,21 +254,22 @@ class _LoginPageState extends State<LoginPage> {
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                               ),
-                            child: _loading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
+                              child: _loading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          Colors.white,
+                                        ),
                                       ),
+                                    )
+                                  : const Text(
+                                      'Login',
+                                      style: TextStyle(fontSize: 16),
                                     ),
-                                  )
-                                : const Text(
-                                    'Login',
-                                    style: TextStyle(fontSize: 16),
-                                  ),
                             ),
                           ),
                         ],

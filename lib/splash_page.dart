@@ -66,7 +66,8 @@ class _SplashPageState extends State<SplashPage>
       try {
         final token = await Sessions.getToken();
         if (token != null && token.isNotEmpty) {
-          Http().dio.options.headers['Authorization'] = 'Bearer $token';
+          // set token on the shared Http singleton
+          Http().setToken(token);
           logger.i('Splash: verifying token via getRoles');
           final res = await Http().getRoles();
           logger.i('Splash: verify result: $res');
@@ -85,7 +86,12 @@ class _SplashPageState extends State<SplashPage>
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('isLoggedIn', false);
-        await prefs.remove('access_token');
+        await Sessions.clearLoginSession();
+        Http().clearToken();
+        logger.i(
+          'Splash: cleared invalid session '
+          '(token, userId, name, email, phone, roleId, role)',
+        );
       } catch (_) {}
       if (!mounted) return;
       Navigator.of(context).pushReplacement(

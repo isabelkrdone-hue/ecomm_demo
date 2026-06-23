@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_ui.dart';
@@ -9,12 +10,13 @@ import 'cart_model.dart';
 import 'shop_image.dart';
 import 'cart_page.dart';
 import 'login_page.dart';
-import 'order_history_page.dart';
 import 'profile_page.dart';
 import 'product_data.dart';
 import 'product_detail_page.dart';
 import 'promo_detail_page.dart';
 import 'add_product_page.dart';
+import 'repository/http.dart';
+import 'sessions.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -45,8 +47,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    const background = Color(0xFFF7F8FC);
-    const primary = Color(0xFF6C7BFF);
+    const background = Colors.white;
+    const primary = Color(0xFFFF6B00);
 
     return Scaffold(
       backgroundColor: background,
@@ -71,28 +73,27 @@ class _DashboardPageState extends State<DashboardPage> {
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
           selectedItemColor: primary,
-          unselectedItemColor: const Color(0xFF94A3B8),
+          unselectedItemColor: const Color(0xFF111827),
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Home',
+              icon: Icon(Icons.explore_rounded),
+              label: 'Beranda',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.shopping_cart),
-              label: 'Cart',
+              icon: Icon(Icons.shopping_bag_outlined),
+              label: 'Troli',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.person),
-              label: 'Profile',
+              icon: Icon(Icons.person_outline_rounded),
+              label: 'Alibaba ...',
             ),
           ],
         ),
       ),
     );
   }
-
 }
 
 class _DashboardHomeTab extends StatefulWidget {
@@ -122,7 +123,8 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
   int selectedCategoryIndex = 0;
   String selectedCategory = 'Semua';
   String selectedFilterCategory = 'Semua';
-  RangeValues selectedPriceRange = const RangeValues(0, 10000000); // Wider range to include all products
+  RangeValues selectedPriceRange =
+      const RangeValues(0, 10000000); // Wider range to include all products
   String _searchQuery = '';
   bool _isLoading = true;
 
@@ -159,42 +161,42 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
   }
 
   List<Map<String, dynamic>> _buildCombinedProducts() {
-  final combinedProducts = List<Map<String, dynamic>>.from(allProducts);
+    final combinedProducts = List<Map<String, dynamic>>.from(allProducts);
 
-  final businesses = BusinessModel.instance.getAllBusinesses();
+    final businesses = BusinessModel.instance.getAllBusinesses();
 
-  for (final business in businesses) {
-    final products = business['products'] as List? ?? [];
+    for (final business in businesses) {
+      final products = business['products'] as List? ?? [];
 
-    for (final product in products) {
-      if (product is Map<String, dynamic>) {
-        final price = product['price'];
+      for (final product in products) {
+        if (product is Map<String, dynamic>) {
+          final price = product['price'];
 
-        final priceText = price is num
-            ? 'Rp ${price.toStringAsFixed(0)}'
-            : (price?.toString() ?? 'Rp 0');
+          final priceText = price is num
+              ? 'Rp ${price.toStringAsFixed(0)}'
+              : (price?.toString() ?? 'Rp 0');
 
-        combinedProducts.add({
-          'name': product['name'],
-          'price': priceText,
-          'image': product['image'] ??
-              product['imagePath'] ??
-              'assets/images/placeholder.png',
-          'category': product['category'] ?? 'Lainnya',
-          'description': product['description'] ??
-              'Produk dari ${business['name']}',
-          'isBusinessProduct': true,
-          'businessName': business['name'],
-          'businessCity': business['city'],
-          'businessProvince': business['province'],
-          'unit': product['unit'] ?? 'Pcs',
-        });
+          combinedProducts.add({
+            'name': product['name'],
+            'price': priceText,
+            'image': product['image'] ??
+                product['imagePath'] ??
+                'assets/images/placeholder.png',
+            'category': product['category'] ?? 'Lainnya',
+            'description':
+                product['description'] ?? 'Produk dari ${business['name']}',
+            'isBusinessProduct': true,
+            'businessName': business['name'],
+            'businessCity': business['city'],
+            'businessProvince': business['province'],
+            'unit': product['unit'] ?? 'Pcs',
+          });
+        }
       }
     }
-  }
 
-  return combinedProducts;
-}
+    return combinedProducts;
+  }
 
   Map<String, dynamic>? _businessByName(String? name) {
     final target = name?.trim() ?? '';
@@ -203,7 +205,8 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
   }
 
   String _verificationStatus(Map<String, dynamic>? business) {
-    return (business?['verificationStatus'] as String? ?? 'pending').toLowerCase();
+    return (business?['verificationStatus'] as String? ?? 'pending')
+        .toLowerCase();
   }
 
   String _verificationLabel(String status) {
@@ -252,10 +255,19 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
   }
 
   Future<void> _handleLogout(BuildContext context) async {
+    final logger = Logger();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isLoggedIn', false);
-    } catch (_) {}
+      await Sessions.clearLoginSession();
+      Http().clearToken();
+      logger.i(
+        'Dashboard logout: cleared isLoggedIn, token, userId, name, email, '
+        'phone, roleId, role, and Authorization header',
+      );
+    } catch (e) {
+      logger.w('Dashboard logout: failed to clear local session: $e');
+    }
     if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       buildPageRoute(const LoginPage()),
@@ -356,56 +368,70 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
     setState(() {
       filteredProducts = combinedProducts.where((product) {
         final name = (product['name'] as String? ?? '').toLowerCase();
-        final businessName = (product['businessName'] as String? ?? '').toLowerCase();
-        final category = product['category'] as String? ?? 'Semua';
+        final businessName =
+            (product['businessName'] as String? ?? '').toLowerCase();
+        final category = product['category']?.toString() ?? 'Semua';
+        final categoryKey = category.trim().toLowerCase();
+        final selectedCategoryKey = selectedCategory.trim().toLowerCase();
+        final selectedFilterCategoryKey =
+            selectedFilterCategory.trim().toLowerCase();
         final price = _parsePrice(product['price']);
 
         final matchSearch = query.isEmpty ||
             name.contains(query) ||
             businessName.contains(query) ||
             category.toLowerCase().contains(query);
-        
+
         // When searching, be more lenient with filters
         if (query.isNotEmpty) {
           // Only apply category filter if specifically selected (not default)
-          final matchCategory = selectedCategory == 'Semua' || category == selectedCategory;
+          final matchCategory = selectedCategoryKey == 'semua' ||
+              categoryKey == selectedCategoryKey;
           return matchSearch && matchCategory;
         } else {
           // When not searching, apply all filters normally
-          final matchCategory = selectedCategory == 'Semua' || category == selectedCategory;
-          final matchFilterCategory =
-              selectedFilterCategory == 'Semua' || category == selectedFilterCategory;
-          final matchPrice =
-              price >= selectedPriceRange.start && price <= selectedPriceRange.end;
-          return matchSearch && matchCategory && matchFilterCategory && matchPrice;
+          final matchCategory = selectedCategoryKey == 'semua' ||
+              categoryKey == selectedCategoryKey;
+          final matchFilterCategory = selectedFilterCategoryKey == 'semua' ||
+              categoryKey == selectedFilterCategoryKey;
+          final matchPrice = price >= selectedPriceRange.start &&
+              price <= selectedPriceRange.end;
+          return matchSearch &&
+              matchCategory &&
+              matchFilterCategory &&
+              matchPrice;
         }
       }).toList();
 
-              final allBusinesses = BusinessModel.instance.getAllBusinesses();
-        if (query.isEmpty) {
+      final allBusinesses = BusinessModel.instance.getAllBusinesses();
+      if (query.isEmpty) {
         filteredBusinesses = [];
         filteredBusinessProducts = [];
       } else {
         filteredBusinesses = allBusinesses.where((business) {
-
           final name = (business['name'] as String? ?? '').toLowerCase();
-          final description = (business['description'] as String? ?? '').toLowerCase();
+          final description =
+              (business['description'] as String? ?? '').toLowerCase();
           final city = (business['city'] as String? ?? '').toLowerCase();
-          final province = (business['province'] as String? ?? '').toLowerCase();
+          final province =
+              (business['province'] as String? ?? '').toLowerCase();
 
           bool hasMatchingProduct = false;
           final products = business['products'] as List? ?? [];
           for (final product in products) {
             if (product is Map<String, dynamic>) {
-              final productName = (product['name'] as String? ?? '').toLowerCase();
-              final productCategory = (product['category'] as String? ?? '').toLowerCase();
-              if (productName.contains(query) || productCategory.contains(query)) {
+              final productName =
+                  (product['name'] as String? ?? '').toLowerCase();
+              final productCategory =
+                  (product['category'] as String? ?? '').toLowerCase();
+              if (productName.contains(query) ||
+                  productCategory.contains(query)) {
                 hasMatchingProduct = true;
                 break;
               }
             }
           }
-          
+
           return name.contains(query) ||
               description.contains(query) ||
               city.contains(query) ||
@@ -418,21 +444,24 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
           final products = business['products'] as List? ?? [];
           for (final product in products) {
             if (product is Map<String, dynamic>) {
-              final productName = (product['name'] as String? ?? '').toLowerCase();
-              final productCategory = (product['category'] as String? ?? '').toLowerCase();
-              final businessName = (business['name'] as String? ?? '').toLowerCase();
+              final productName =
+                  (product['name'] as String? ?? '').toLowerCase();
+              final productCategory =
+                  (product['category'] as String? ?? '').toLowerCase();
+              final businessName =
+                  (business['name'] as String? ?? '').toLowerCase();
               if (productName.contains(query) ||
                   productCategory.contains(query) ||
                   businessName.contains(query)) {
                 final productWithBusiness = Map<String, dynamic>.from(product);
 
-productWithBusiness['image'] =
-    product['image'] ?? product['imagePath'];
+                productWithBusiness['image'] =
+                    product['image'] ?? product['imagePath'];
 
-productWithBusiness['businessName'] = business['name'];
-productWithBusiness['businessCity'] = business['city'];
+                productWithBusiness['businessName'] = business['name'];
+                productWithBusiness['businessCity'] = business['city'];
 
-filteredBusinessProducts.add(productWithBusiness);
+                filteredBusinessProducts.add(productWithBusiness);
               }
             }
           }
@@ -453,7 +482,7 @@ filteredBusinessProducts.add(productWithBusiness);
   }
 
   void _filterByCategory(String category) {
-    final index = _categories.indexWhere((item) => item['name'] == category);
+    final index = _availableProductCategories().indexOf(category);
     setState(() {
       selectedCategory = category;
       selectedFilterCategory = category;
@@ -462,6 +491,33 @@ filteredBusinessProducts.add(productWithBusiness);
       }
     });
     _applyAllFilters();
+  }
+
+  List<String> _availableProductCategories() {
+    final categories = <String>['Semua'];
+    final seen = <String>{'semua'};
+
+    for (final product in _buildCombinedProducts()) {
+      final category = product['category']?.toString().trim() ?? '';
+      if (category.isEmpty) continue;
+      final key = category.toLowerCase();
+      if (seen.contains(key)) continue;
+      categories.add(category);
+      seen.add(key);
+    }
+
+    if (categories.length == 1) {
+      for (final category in _categories) {
+        final name = category['name']?.toString().trim() ?? '';
+        if (name.isEmpty) continue;
+        final key = name.toLowerCase();
+        if (seen.contains(key)) continue;
+        categories.add(name);
+        seen.add(key);
+      }
+    }
+
+    return categories;
   }
 
   void _showFilterSheet(BuildContext context) {
@@ -494,7 +550,8 @@ filteredBusinessProducts.add(productWithBusiness);
                 return Container(
                   decoration: const BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(28)),
                   ),
                   child: ListView(
                     controller: scrollController,
@@ -577,7 +634,6 @@ filteredBusinessProducts.add(productWithBusiness);
                         onChanged: (values) {
                           setModalState(() {
                             tempRange = values;
-            
                           });
                         },
                       ),
@@ -597,7 +653,8 @@ filteredBusinessProducts.add(productWithBusiness);
                             setState(() {
                               selectedFilterCategory = tempCategory;
                               selectedCategory = tempCategory;
-                              final categoryIndex = _categories.indexWhere((item) => item['name'] == tempCategory);
+                              final categoryIndex = _categories.indexWhere(
+                                  (item) => item['name'] == tempCategory);
                               if (categoryIndex != -1) {
                                 selectedCategoryIndex = categoryIndex;
                               }
@@ -625,110 +682,31 @@ filteredBusinessProducts.add(productWithBusiness);
 
   @override
   Widget build(BuildContext context) {
-    const background = Color(0xFFF7F8FC);
-    const primary = Color(0xFF6C7BFF);
-    const textColor = Color(0xFF111827);
+    final producerSections = _producerSections();
 
     return Scaffold(
-      backgroundColor: background,
-      appBar: AppBar(
-        title: const Text(
-          'My Shop',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-        centerTitle: false,
-        elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: textColor,
-        actions: [
-          _buildCartIcon(),
-          IconButton(
-            onPressed: _openAddProductPage,
-            icon: const Icon(Icons.add_rounded),
-            tooltip: 'Jual Produk',
-          ),
-          IconButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                buildPageRoute(const OrderHistoryPage()),
-              );
-            },
-            icon: const Icon(Icons.history_rounded),
-            tooltip: 'Riwayat Pesanan',
-          ),
-          IconButton(
-            onPressed: () => _handleLogout(context),
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout',
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: _isLoading
           ? const DashboardSkeleton()
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              padding: EdgeInsets.fromLTRB(
+                12,
+                MediaQuery.of(context).padding.top + 10,
+                12,
+                24,
+              ),
               children: [
-                _buildHeroHeader(context),
+                _buildProducerTabs(),
                 const SizedBox(height: 16),
-                _buildSearchBar(context),
-                const SizedBox(height: 16),
-                const SizedBox(height: 24),
-                if (filteredBusinesses.isNotEmpty) ...[
-                  _buildSectionHeader('Bisnis Ditemukan', trailing: '${filteredBusinesses.length}'),
-                  const SizedBox(height: 12),
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filteredBusinesses.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final business = filteredBusinesses[index];
-                      return _buildBusinessCard(context, business);
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                ],
-                _buildPromoBanner(context),
-                const SizedBox(height: 24),
-                _buildSectionHeader('Kategori Populer'),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 108,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _categories.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (context, index) {
-                      final category = _categories[index];
-                      return _buildCategoryItem(
-                        context: context,
-                        index: index,
-                        name: category['name'] as String,
-                        icon: category['icon'] as IconData,
-                        isActive: index == selectedCategoryIndex,
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _buildSectionHeader(
-  _searchQuery.trim().isEmpty
-      ? 'Semua Produk'
-      : 'Hasil Pencarian',
-  trailing: '${filteredProducts.length}',
-),
+                _buildAlibabaSearchBar(context),
+                const SizedBox(height: 18),
+                _buildProducerCategoryBar(),
                 const SizedBox(height: 12),
                 if (filteredProducts.isEmpty)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 42),
+                    padding: const EdgeInsets.symmetric(vertical: 44),
                     alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
                     child: const Text(
                       'Produk tidak ditemukan',
                       style: TextStyle(
@@ -736,52 +714,435 @@ filteredBusinessProducts.add(productWithBusiness);
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF64748B),
                       ),
-                ),
+                    ),
                   )
                 else
-                  GridView.builder(
+                  ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filteredProducts.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 0.54,
-                    ),
-                    itemBuilder: (context, index) {
-                      final product = filteredProducts[index];
-                      final isFavorite = _favoriteIndexes.contains(index);
-                      return _buildProductCard(
-                        context: context,
-                        index: index,
-                        product: product,
-                        name: _textValue(product['name']),
-                        price: _priceText(product['price']),
-                        imageUrl: _textValue(product['image'], fallback: 'assets/images/placeholder.png'),
-                        isFavorite: isFavorite,
-                      );
-                    },
+                    itemCount: producerSections.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 22),
+                    itemBuilder: (context, index) =>
+                        _buildProducerSection(producerSections[index]),
                   ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _handleLogout(context),
-                    icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Logout'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: primary,
-                      side: const BorderSide(color: Color(0xFFD7DBFF)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildProducerTabs() {
+    const tabs = ['Mode AI', 'Produk', 'Produsen', 'Global'];
+
+    return Row(
+      children: List.generate(tabs.length, (index) {
+        final isActive = tabs[index] == 'Produsen';
+        return Padding(
+          padding: EdgeInsets.only(right: index == tabs.length - 1 ? 0 : 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                tabs[index],
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF111827),
+                ),
+              ),
+              const SizedBox(height: 8),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: isActive ? 70 : 0,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6B00),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildAlibabaSearchBar(BuildContext context) {
+    return Container(
+      height: 58,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFF6B00), width: 1.6),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: _openAddProductPage,
+            icon: const Icon(Icons.camera_alt_outlined, size: 28),
+            tooltip: 'Jual Produk',
+          ),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              onChanged: _searchProducts,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+              decoration: const InputDecoration(
+                hintText: 'sistem suara yamaha',
+                border: InputBorder.none,
+                isDense: true,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: () => _showFilterSheet(context),
+            icon: const Icon(Icons.mic_none_rounded, size: 30),
+            tooltip: 'Filter',
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 5),
+            child: SizedBox(
+              width: 70,
+              height: 46,
+              child: ElevatedButton(
+                onPressed: () => _searchProducts(_searchController.text),
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  backgroundColor: const Color(0xFFFF7A18),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                ),
+                child: const Icon(Icons.auto_awesome_rounded, size: 28),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProducerCategoryBar() {
+    final categories = _availableProductCategories();
+
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length + 1,
+        separatorBuilder: (_, __) => const SizedBox(width: 22),
+        itemBuilder: (context, index) {
+          if (index == categories.length) {
+            return const Center(
+              child: Icon(Icons.keyboard_arrow_down_rounded, size: 30),
+            );
+          }
+          final title = categories[index];
+          final isActive = selectedCategory == title ||
+              (selectedCategory == 'Semua' && title == 'Semua');
+          return InkWell(
+            onTap: () => _filterByCategory(title),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: isActive ? FontWeight.w800 : FontWeight.w700,
+                    color: isActive
+                        ? const Color(0xFF111827)
+                        : const Color(0xFF6B7280),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: isActive ? 76 : 0,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF111827),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                 ),
               ],
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _producerSections() {
+    final sections = <Map<String, dynamic>>[];
+    final businesses = BusinessModel.instance.getAllBusinesses();
+    final products = filteredProducts;
+
+    if (businesses.isNotEmpty) {
+      for (final business in businesses) {
+        final name = business['name'] as String? ?? 'Produsen';
+        final businessProducts = products
+            .where((product) => product['businessName'] == name)
+            .take(3)
+            .toList();
+        if (businessProducts.isEmpty) continue;
+        sections.add({
+          'business': business,
+          'products': businessProducts,
+        });
+      }
+    }
+
+    final usedCount = sections.fold<int>(
+      0,
+      (total, section) => total + ((section['products'] as List?)?.length ?? 0),
+    );
+    final remaining = products.skip(usedCount).toList();
+
+    for (var i = 0; i < remaining.length; i += 3) {
+      final chunk = remaining.skip(i).take(3).toList();
+      if (chunk.isEmpty) continue;
+      sections.add({
+        'business': {
+          'name': i == 0
+              ? 'Shenzhen Home Design Houseware Ltd'
+              : 'Guangzhou High Hip-Hop Amusement Eq...',
+          'verificationStatus': 'verified',
+          'city': i == 0 ? 'Shenzhen' : 'Guangzhou',
+          'province': 'China',
+          'products': chunk,
+        },
+        'products': chunk,
+      });
+    }
+
+    for (var i = 0; i < sections.length; i++) {
+      sections[i]['isFirst'] = i == 0;
+    }
+
+    return sections;
+  }
+
+  Widget _buildProducerSection(Map<String, dynamic> section) {
+    final business = Map<String, dynamic>.from(section['business'] as Map);
+    final products =
+        List<Map<String, dynamic>>.from(section['products'] as List);
+    final firstSection = section['isFirst'] == true;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (firstSection)
+          const Padding(
+            padding: EdgeInsets.only(left: 92, bottom: 14),
+            child: Text(
+              'Desain kustom dalam 3 hari · Pengiriman tepat waktu 100.0%',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Color(0xFF6B7280),
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        _buildProducerProductRow(products),
+        const SizedBox(height: 14),
+        _buildProducerInfo(business),
+        const SizedBox(height: 8),
+        Text(
+          firstSection
+              ? 'Desain kustom dalam 3 hari · Waktu respons ≤3h'
+              : 'Layanan ODM tersedia · Kustomisasi Minor',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Color(0xFF6B7280),
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProducerProductRow(List<Map<String, dynamic>> products) {
+    return Row(
+      children: List.generate(3, (index) {
+        final product =
+            index < products.length ? products[index] : products.last;
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: index == 2 ? 0 : 8),
+            child: _buildMiniProductCard(product),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildMiniProductCard(Map<String, dynamic> product) {
+    final price = _priceText(product['price']);
+    final unit = _textValue(
+      product['unit'] ?? product['satuan'] ?? product['category'],
+      fallback: 'Buah',
+    );
+
+    return TapScale(
+      onTap: () {
+        Navigator.of(context).push(
+          buildPageRoute(ProductDetailPage(product: product)),
+        );
+      },
+      borderRadius: BorderRadius.circular(6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: ShopImage(
+                    imagePath: _textValue(
+                      product['image'],
+                      fallback: 'assets/images/placeholder.png',
+                    ),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 7,
+                bottom: 7,
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.92),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.center_focus_weak_rounded,
+                    color: Color(0xFF4B5563),
+                    size: 24,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            price,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF111827),
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '10 $unit (MOQ)',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF6B7280),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProducerInfo(Map<String, dynamic> business) {
+    final status = _verificationStatus(business);
+    final verified = status == 'verified';
+
+    return TapScale(
+      onTap: () {
+        final realBusiness = _businessByName(business['name'] as String?);
+        if (realBusiness == null) return;
+        Navigator.of(context).push(
+          buildPageRoute(BusinessDetailPage(business: realBusiness)),
+        );
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: const Icon(
+              Icons.storefront_rounded,
+              color: Color(0xFFFF6B00),
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  business['name'] as String? ?? 'Produsen',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF111827),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    if (verified) ...[
+                      const Text(
+                        'Verified',
+                        style: TextStyle(
+                          color: Color(0xFF0284C7),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    const Expanded(
+                      child: Text(
+                        '16 thn · 40+ pekerja · 1,900+ m² · Rp2,1 M+',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Color(0xFF111827),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -820,7 +1181,8 @@ filteredBusinessProducts.add(productWithBusiness);
                   color: Colors.white.withOpacity(0.14),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 28),
+                child: const Icon(Icons.storefront_rounded,
+                    color: Colors.white, size: 28),
               ),
               const SizedBox(width: 14),
               const Expanded(
@@ -852,11 +1214,17 @@ filteredBusinessProducts.add(productWithBusiness);
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _heroStatCard('Produk', '$productCount', Icons.inventory_2_rounded)),
+              Expanded(
+                  child: _heroStatCard(
+                      'Produk', '$productCount', Icons.inventory_2_rounded)),
               const SizedBox(width: 10),
-              Expanded(child: _heroStatCard('Toko', '${businesses.length}', Icons.store_rounded)),
+              Expanded(
+                  child: _heroStatCard(
+                      'Toko', '${businesses.length}', Icons.store_rounded)),
               const SizedBox(width: 10),
-              Expanded(child: _heroStatCard('Verified', '$verifiedCount', Icons.verified_rounded)),
+              Expanded(
+                  child: _heroStatCard(
+                      'Verified', '$verifiedCount', Icons.verified_rounded)),
             ],
           ),
         ],
@@ -910,7 +1278,8 @@ filteredBusinessProducts.add(productWithBusiness);
       ),
       child: Text(
         _verificationLabel(status),
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+        style:
+            TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
       ),
     );
   }
@@ -954,7 +1323,8 @@ filteredBusinessProducts.add(productWithBusiness);
             ],
           ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
     );
@@ -1090,7 +1460,8 @@ filteredBusinessProducts.add(productWithBusiness);
             color: isActive ? const Color(0xFF6C7BFF) : Colors.white,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: isActive ? const Color(0xFF6C7BFF) : const Color(0xFFE5E7EB),
+              color:
+                  isActive ? const Color(0xFF6C7BFF) : const Color(0xFFE5E7EB),
             ),
             boxShadow: [
               BoxShadow(
@@ -1114,9 +1485,7 @@ filteredBusinessProducts.add(productWithBusiness);
                 ),
                 child: Icon(
                   icon,
-                  color: isActive
-                      ? Colors.white
-                      : const Color(0xFF6B7280),
+                  color: isActive ? Colors.white : const Color(0xFF6B7280),
                   size: 22,
                 ),
               ),
@@ -1132,7 +1501,7 @@ filteredBusinessProducts.add(productWithBusiness);
                   color: isActive ? Colors.white : const Color(0xFF4B5563),
                 ),
               ),
-        ],
+            ],
           ),
         ),
       ),
@@ -1159,8 +1528,10 @@ filteredBusinessProducts.add(productWithBusiness);
                   right: -6,
                   top: -6,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    constraints:
+                        const BoxConstraints(minWidth: 18, minHeight: 18),
                     decoration: BoxDecoration(
                       color: const Color(0xFFEF4444),
                       borderRadius: BorderRadius.circular(999),
@@ -1238,7 +1609,8 @@ filteredBusinessProducts.add(productWithBusiness);
                       top: 10,
                       left: 10,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: const Color(0xFF111827).withOpacity(0.78),
                           borderRadius: BorderRadius.circular(999),
@@ -1284,7 +1656,8 @@ filteredBusinessProducts.add(productWithBusiness);
                                 value: 'delete',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.delete_rounded, size: 18, color: Colors.redAccent),
+                                    Icon(Icons.delete_rounded,
+                                        size: 18, color: Colors.redAccent),
                                     SizedBox(width: 10),
                                     Text('Hapus'),
                                   ],
@@ -1349,7 +1722,8 @@ filteredBusinessProducts.add(productWithBusiness);
               const SizedBox(height: 6),
               if (businessName != null && businessName.isNotEmpty) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: const Color(0xFFEEF2FF),
                     borderRadius: BorderRadius.circular(999),
@@ -1367,7 +1741,8 @@ filteredBusinessProducts.add(productWithBusiness);
                 ),
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: statusColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(999),
@@ -1398,7 +1773,8 @@ filteredBusinessProducts.add(productWithBusiness);
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 12),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 7, horizontal: 12),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF5F7FF),
                   borderRadius: BorderRadius.circular(12),
@@ -1420,7 +1796,8 @@ filteredBusinessProducts.add(productWithBusiness);
     );
   }
 
-  Widget _buildBusinessCard(BuildContext context, Map<String, dynamic> business) {
+  Widget _buildBusinessCard(
+      BuildContext context, Map<String, dynamic> business) {
     return TapScale(
       onTap: () {
         Navigator.of(context).push(
@@ -1500,7 +1877,8 @@ filteredBusinessProducts.add(productWithBusiness);
                         _buildStatusChip(business),
                         const Spacer(),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF1F5F9),
                             borderRadius: BorderRadius.circular(8),

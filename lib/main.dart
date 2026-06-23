@@ -19,7 +19,8 @@ void main() async {
   // set Authorization header from saved session token (if any)
   final token = await Sessions.getToken();
   if (token != null && token.isNotEmpty) {
-    Http().dio.options.headers['Authorization'] = 'Bearer $token';
+    // use Http.setToken so the singleton updates headers consistently
+    Http().setToken(token);
   }
   
   runApp(const MyApp());
@@ -114,6 +115,7 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
 
 
 

@@ -1,8 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
-import '../sessions.dart';
 
 class Http {
+  // Singleton instance
+  static final Http _instance = Http._internal();
+
+  factory Http() => _instance;
+
   late Dio dio;
 
   final Logger logger = Logger();
@@ -10,10 +14,17 @@ class Http {
   static const String baseUrl =
       'https://social-mammal-entirely.ngrok-free.app/api/v1/';
 
-  // Singleton
-  static final Http _instance = Http._internal();
-  factory Http() => _instance;
+  int _boolQuery(bool value) => value ? 1 : 0;
 
+  String? token;
+  String? userId;
+  String? name;
+  String? email;
+  String? phone;
+  String? roleId;
+  String? role;
+
+  // private constructor
   Http._internal() {
     dio = Dio(
       BaseOptions(
@@ -31,29 +42,182 @@ class Http {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          logger.i('➡️ ${options.method} ${options.uri}');
-          try {
-            logger.i('   request headers: ${options.headers}');
-          } catch (_) {}
+          logger.i(
+            '➡️ ${options.method} ${options.uri}',
+          );
+
+          logger.i(
+            'HEADERS: ${options.headers}',
+          );
+
           handler.next(options);
         },
         onResponse: (response, handler) {
-          logger.i(
-            '✅ ${response.statusCode} ${response.requestOptions.path}',
-          );
+          // Log status and path
+          logger.i('✅ ${response.statusCode} ${response.requestOptions.path}');
+
+          // Log request details (if any) and response body to help debugging
+          try {
+            logger.d('REQUEST DATA: ${response.requestOptions.data}');
+          } catch (_) {}
+
+          try {
+            logger.i('RESPONSE DATA: ${response.data}');
+          } catch (_) {
+            logger.i(
+                'RESPONSE RECEIVED (unprintable) for ${response.requestOptions.path}');
+          }
+
           handler.next(response);
         },
         onError: (error, handler) {
+          // Safely log error information. Wrap in try/catch to avoid throwing
           try {
-            logger.e('❌ ${error.response?.statusCode} ${error.requestOptions.path}');
-            logger.e('   response data: ${error.response?.data}');
-          } catch (_) {
-            logger.e('❌ Dio error: $error');
+            final status = error.response?.statusCode;
+            String path = '';
+            try {
+              path = error.requestOptions.path;
+            } catch (_) {
+              path = '';
+            }
+
+            logger.e('❌ $status $path');
+
+            final errData = error.response?.data ?? error.message;
+            // Convert common structures to a readable string safely
+            try {
+              logger.e('ERROR DATA: $errData');
+            } catch (_) {
+              logger.e('ERROR DATA (unprintable)');
+            }
+          } catch (e) {
+            // Fallback logging if something unexpected happens while logging
+            logger.e('Error while logging Dio error: $e');
           }
+
           handler.next(error);
         },
       ),
     );
+  }
+
+  // =====================
+  // TOKEN
+  // =====================
+
+  void setToken(String token) {
+    dio.options.headers['Authorization'] = 'Bearer $token';
+
+    logger.i(
+      '🔑 Authorization header updated',
+    );
+  }
+
+  void clearToken() {
+    dio.options.headers.remove('Authorization');
+
+    logger.i(
+      '🔓 Authorization header removed',
+    );
+  }
+
+  Future<Map<String, dynamic>> getRoles({
+    String? search,
+    bool? isActive,
+    int? perPage,
+  }) async {
+    try {
+      final response = await dio.get(
+        'roles',
+        queryParameters: {
+          if (search != null) 'search': search,
+          if (isActive != null) 'is_active': _boolQuery(isActive),
+          if (perPage != null) 'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getRole(String id) async {
+    try {
+      final response = await dio.get(
+        'roles/$id',
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> createRole({
+    required String nama,
+    bool isActive = true,
+  }) async {
+    try {
+      final response = await dio.post(
+        'roles',
+        data: {
+          'nama': nama,
+          'is_active': isActive,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> updateRole({
+    required String id,
+    required String nama,
+    bool isActive = true,
+  }) async {
+    try {
+      final response = await dio.put(
+        'roles/$id',
+        data: {
+          'nama': nama,
+          'is_active': isActive,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> deleteRole(String id) async {
+    try {
+      final response = await dio.delete(
+        'roles/$id',
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
   }
 
   // =====================
@@ -75,12 +239,24 @@ class Http {
         },
       );
 
-      // Ensure we always return a consistent map structure
-      if (response.data is Map<String, dynamic>) return Map<String, dynamic>.from(response.data as Map);
-      return {
-        'success': true,
-        'data': response.data,
-      };
+      final result = Map<String, dynamic>.from(response.data);
+
+      if (result['success'] == true) {
+        final data = result['data'];
+        final user = data['user'];
+
+        token = data['token'];
+        userId = user['id'];
+        name = user['name'];
+        this.email = user['email'];
+        phone = user['phone'];
+        roleId = user['role_id'];
+        role = user['role'];
+
+        setToken(token!);
+      }
+
+      return result;
     } on DioException catch (e) {
       return {
         'success': false,
@@ -95,7 +271,7 @@ class Http {
         'auth/logout',
       );
 
-      return response.data;
+      return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
       return {
         'success': false,
@@ -104,63 +280,370 @@ class Http {
     }
   }
 
-  Future<Map<String, dynamic>> getRoles({
+  Future<Map<String, dynamic>> registerSeller({
+    required String name,
+    required String email,
+    required String phone,
+    required String password,
+    required String passwordConfirmation,
+    required String kategoriSellerId,
+    required String namaToko,
+    required String alamat,
+    required String kota,
+    required String provinsi,
+    required String kecamatan,
+    required String desa,
+    String? logo,
+    String? deskripsi,
+  }) async {
+    try {
+      final response = await dio.post(
+        'auth/register-seller',
+        data: {
+          'name': name,
+          'email': email,
+          'phone': phone,
+          'password': password,
+          'password_confirmation': passwordConfirmation,
+          'kategori_seller_id': kategoriSellerId,
+          'nama_toko': namaToko,
+          'alamat': alamat,
+          'kota': kota,
+          'provinsi': provinsi,
+          'kecamatan': kecamatan,
+          'desa': desa,
+          'logo': logo,
+          'deskripsi': deskripsi,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getKategoriSeller({
     String? search,
     bool? isActive,
     int? perPage,
   }) async {
-    // Try request, if 401 try to refresh header from Sessions and retry once
     try {
-      // ensure Authorization header is present (try Sessions if not set)
-      try {
-        final token = await Sessions.getToken();
-        if (token != null && token.isNotEmpty) {
-          final current = dio.options.headers['Authorization'];
-          if (current == null || (current is String && current.isEmpty)) {
-            dio.options.headers['Authorization'] = 'Bearer $token';
-            logger.i('getRoles: set Authorization header from Sessions');
-          }
-        }
-      } catch (_) {}
-
       final response = await dio.get(
-        'roles',
+        'kategori-seller',
         queryParameters: {
           if (search != null) 'search': search,
-          if (isActive != null) 'is_active': isActive,
+          if (isActive != null) 'is_active': _boolQuery(isActive),
           if (perPage != null) 'per_page': perPage,
         },
       );
 
-      if (response.data is Map<String, dynamic>) return Map<String, dynamic>.from(response.data as Map);
-      return {
-        'success': true,
-        'data': response.data,
-      };
+      return Map<String, dynamic>.from(response.data);
     } on DioException catch (e) {
-      // if unauthorized, try to set header from Sessions and retry once
-      final status = e.response?.statusCode;
-      if (status == 401) {
-        try {
-          final token = await Sessions.getToken();
-          if (token != null && token.isNotEmpty) {
-            dio.options.headers['Authorization'] = 'Bearer $token';
-            logger.i('getRoles: retrying after setting Authorization from Sessions');
-            final retry = await dio.get(
-              'roles',
-              queryParameters: {
-                if (search != null) 'search': search,
-                if (isActive != null) 'is_active': isActive,
-                if (perPage != null) 'per_page': perPage,
-              },
-            );
-            if (retry.data is Map<String, dynamic>) return Map<String, dynamic>.from(retry.data as Map);
-            return {'success': true, 'data': retry.data};
-          }
-        } catch (retryErr) {
-          logger.w('getRoles retry failed: $retryErr');
-        }
-      }
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getProvinces({
+    String? search,
+    bool? isActive,
+    int? perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'provinces',
+        queryParameters: {
+          if (search != null) 'search': search,
+          if (isActive != null) 'is_active': _boolQuery(isActive),
+          if (perPage != null) 'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getRegencies({
+    String? provinceId,
+    String? search,
+    bool? isActive,
+    int? perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'regencies',
+        queryParameters: {
+          if (provinceId != null) 'province_id': provinceId,
+          if (search != null) 'search': search,
+          if (isActive != null) 'is_active': _boolQuery(isActive),
+          if (perPage != null) 'per_page': perPage,
+        },
+      );
+
+      // Explicit debug log for regencies: full request uri and response data
+      try {
+        logger.i('getRegencies request => ${response.requestOptions.uri}');
+        logger.i('getRegencies response => ${response.data}');
+      } catch (_) {}
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getDistricts({
+    String? regencyId,
+    String? search,
+    bool? isActive,
+    int? perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'districts',
+        queryParameters: {
+          if (regencyId != null) 'regency_id': regencyId,
+          if (search != null) 'search': search,
+          if (isActive != null) 'is_active': _boolQuery(isActive),
+          if (perPage != null) 'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getVillages({
+    String? districtId,
+    String? search,
+    bool? isActive,
+    int? perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'villages',
+        queryParameters: {
+          if (districtId != null) 'district_id': districtId,
+          if (search != null) 'search': search,
+          if (isActive != null) 'is_active': _boolQuery(isActive),
+          if (perPage != null) 'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getSatuan({
+    String? search,
+    bool isActive = true,
+    int perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'satuan',
+        queryParameters: {
+          if (search != null) 'search': search,
+          'is_active': _boolQuery(isActive),
+          'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getKategoriProduk({
+    String? search,
+    String? parentId,
+    bool isActive = true,
+    int perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'kategori-produk',
+        queryParameters: {
+          if (search != null) 'search': search,
+          if (parentId != null) 'parent_id': parentId,
+          'is_active': _boolQuery(isActive),
+          'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getProduk({
+    String? search,
+    String? sellerId,
+    String? kategoriProdukId,
+    String? satuanId,
+    bool isActive = true,
+    int perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'produk',
+        queryParameters: {
+          if (search != null) 'search': search,
+          if (sellerId != null) 'seller_id': sellerId,
+          if (kategoriProdukId != null) 'kategori_produk_id': kategoriProdukId,
+          if (satuanId != null) 'satuan_id': satuanId,
+          'is_active': _boolQuery(isActive),
+          'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  // =====================
+// PRODUK VARIAN
+// =====================
+
+  Future<Map<String, dynamic>> getProdukVarian({
+    String? search,
+    String? produkId,
+    int perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'produk-varian',
+        queryParameters: {
+          if (search != null) 'search': search,
+          if (produkId != null) 'produk_id': produkId,
+          'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getProdukVarianDetail(
+    String id,
+  ) async {
+    try {
+      final response = await dio.get(
+        'produk-varian/$id',
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> createProdukVarian({
+    required String produkId,
+    required String namaVarian,
+    required int qty,
+    required double harga,
+    bool isActive = true,
+  }) async {
+    try {
+      final response = await dio.post(
+        'produk-varian',
+        data: {
+          'produk_id': produkId,
+          'nama_varian': namaVarian,
+          'qty': qty,
+          'harga': harga,
+          'is_active': isActive,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> updateProdukVarian({
+    required String id,
+    required String produkId,
+    required String namaVarian,
+    required int qty,
+    required double harga,
+    bool isActive = true,
+  }) async {
+    try {
+      final payload = {
+        'produk_id': produkId,
+        'nama_varian': namaVarian,
+        'qty': qty,
+        'harga': harga,
+        'is_active': isActive,
+      };
+
+      logger.i('UPDATE PRODUK VARIAN REQUEST: produk-varian/$id');
+      logger.i('UPDATE PRODUK VARIAN PAYLOAD: $payload');
+
+      final response = await dio.put(
+        'produk-varian/$id',
+        data: payload,
+      );
+
+      logger.i('UPDATE PRODUK VARIAN STATUS: ${response.statusCode}');
+      logger.i('UPDATE PRODUK VARIAN RESPONSE: ${response.data}');
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      logger.e('UPDATE PRODUK VARIAN ERROR: ${e.response?.statusCode}');
+      logger.e('UPDATE PRODUK VARIAN ERROR DATA: ${e.response?.data}');
+      logger.e('UPDATE PRODUK VARIAN ERROR MESSAGE: ${e.message}');
 
       return {
         'success': false,
@@ -169,5 +652,20 @@ class Http {
     }
   }
 
-  // ... other methods omitted in this shim
+  Future<Map<String, dynamic>> deleteProdukVarian(
+    String id,
+  ) async {
+    try {
+      final response = await dio.delete(
+        'produk-varian/$id',
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
 }

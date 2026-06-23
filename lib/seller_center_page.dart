@@ -290,7 +290,9 @@ class _SellerCenterPageState extends State<SellerCenterPage> {
   }
 
   Future<void> _openEditStore(Map<String, dynamic> business, int index) async {
-    await Navigator.of(context).push(buildPageRoute(AddBusinessPage(existingBusiness: business, businessIndex: index)));
+    // AddBusinessPage no longer accepts existingBusiness/businessIndex.
+    // Open the AddBusinessPage for creating a new store instead.
+    await Navigator.of(context).push(buildPageRoute(const AddBusinessPage()));
     _refresh();
   }
 

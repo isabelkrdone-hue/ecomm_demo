@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'address_model.dart';
 import 'app_ui.dart';
+import 'repository/http.dart';
 
 class MyAddressPage extends StatefulWidget {
   const MyAddressPage({super.key});
@@ -14,13 +15,6 @@ class _MyAddressPageState extends State<MyAddressPage> {
   final AddressModel _addressModel = AddressModel.instance;
 
   void _showAddressForm({Map<String, String>? existing, int? editIndex}) {
-    final labelCtrl = TextEditingController(text: existing?['label'] ?? '');
-    final nameCtrl = TextEditingController(text: existing?['name'] ?? '');
-    final phoneCtrl = TextEditingController(text: existing?['phone'] ?? '');
-    final addressCtrl = TextEditingController(text: existing?['address'] ?? '');
-    final cityCtrl = TextEditingController(text: existing?['city'] ?? '');
-    final formKey = GlobalKey<FormState>();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -29,126 +23,26 @@ class _MyAddressPageState extends State<MyAddressPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-              20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
-          child: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Handle bar
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE2E8F0),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    editIndex != null ? 'Edit Alamat' : 'Tambah Alamat',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF111827),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  _BottomSheetField(
-                    controller: labelCtrl,
-                    label: 'Label (contoh: Rumah, Kantor)',
-                    icon: Icons.label_outline_rounded,
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Label tidak boleh kosong'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  _BottomSheetField(
-                    controller: nameCtrl,
-                    label: 'Nama Penerima',
-                    icon: Icons.person_outline_rounded,
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Nama tidak boleh kosong'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  _BottomSheetField(
-                    controller: phoneCtrl,
-                    label: 'No. Telepon',
-                    icon: Icons.phone_outlined,
-                    keyboardType: TextInputType.phone,
-                  ),
-                  const SizedBox(height: 12),
-                  _BottomSheetField(
-                    controller: addressCtrl,
-                    label: 'Alamat Lengkap',
-                    icon: Icons.location_on_outlined,
-                    maxLines: 2,
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Alamat tidak boleh kosong'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  _BottomSheetField(
-                    controller: cityCtrl,
-                    label: 'Kota & Kode Pos',
-                    icon: Icons.location_city_outlined,
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: FilledButton(
-                      onPressed: () {
-                        if (!formKey.currentState!.validate()) return;
-                        final newAddress = {
-                          'label': labelCtrl.text.trim(),
-                          'name': nameCtrl.text.trim(),
-                          'phone': phoneCtrl.text.trim(),
-                          'address': addressCtrl.text.trim(),
-                          'city': cityCtrl.text.trim(),
-                        };
-                        if (editIndex != null) {
-                          _addressModel.updateAddress(editIndex, newAddress);
-                        } else {
-                          _addressModel.addAddress(newAddress);
-                        }
-                        setState(() {});
-                        Navigator.of(ctx).pop();
-                        showAppSnackBar(
-                          context,
-                          editIndex != null
-                              ? 'Alamat berhasil diperbarui!'
-                              : 'Alamat baru berhasil ditambahkan!',
-                          backgroundColor: const Color(0xFF22C55E),
-                          icon: Icons.check_circle_rounded,
-                        );
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: Text(
-                        editIndex != null ? 'Simpan Perubahan' : 'Tambah Alamat',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        return _AddressFormSheet(
+          existing: existing,
+          editIndex: editIndex,
+          onSubmit: (newAddress) {
+            if (editIndex != null) {
+              _addressModel.updateAddress(editIndex, newAddress);
+            } else {
+              _addressModel.addAddress(newAddress);
+            }
+            setState(() {});
+            Navigator.of(ctx).pop();
+            showAppSnackBar(
+              context,
+              editIndex != null
+                  ? 'Alamat berhasil diperbarui!'
+                  : 'Alamat baru berhasil ditambahkan!',
+              backgroundColor: const Color(0xFF22C55E),
+              icon: Icons.check_circle_rounded,
+            );
+          },
         );
       },
     );
@@ -225,8 +119,7 @@ class _MyAddressPageState extends State<MyAddressPage> {
         child: _addressModel.isEmpty
             ? const _EmptyAddressView()
             : ListView.separated(
-                padding:
-                    const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
                 itemCount: _addressModel.addresses.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
@@ -308,8 +201,7 @@ class _MyAddressPageState extends State<MyAddressPage> {
                               IconButton(
                                 onPressed: () => _showAddressForm(
                                     existing: addr, editIndex: index),
-                                icon: const Icon(Icons.edit_outlined,
-                                    size: 18),
+                                icon: const Icon(Icons.edit_outlined, size: 18),
                                 color: const Color(0xFF64748B),
                                 visualDensity: VisualDensity.compact,
                                 padding: EdgeInsets.zero,
@@ -373,6 +265,408 @@ class _MyAddressPageState extends State<MyAddressPage> {
 
 // ─── Reusable widgets ────────────────────────────────────────────────────────
 
+class _AddressFormSheet extends StatefulWidget {
+  const _AddressFormSheet({
+    required this.onSubmit,
+    this.existing,
+    this.editIndex,
+  });
+
+  final Map<String, String>? existing;
+  final int? editIndex;
+  final ValueChanged<Map<String, String>> onSubmit;
+
+  @override
+  State<_AddressFormSheet> createState() => _AddressFormSheetState();
+}
+
+class _AddressFormSheetState extends State<_AddressFormSheet> {
+  static const int _locationPerPage = 100;
+
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _labelCtrl;
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _phoneCtrl;
+  late final TextEditingController _addressCtrl;
+
+  String? _selectedProvince;
+  String? _selectedRegency;
+  String? _selectedDistrict;
+  String? _selectedVillage;
+
+  List<Map<String, String>> _provinces = [];
+  List<Map<String, String>> _regencies = [];
+  List<Map<String, String>> _districts = [];
+  List<Map<String, String>> _villages = [];
+
+  bool _loadingProvinces = false;
+  bool _loadingRegencies = false;
+  bool _loadingDistricts = false;
+  bool _loadingVillages = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _labelCtrl = TextEditingController(text: existing?['label'] ?? '');
+    _nameCtrl = TextEditingController(text: existing?['name'] ?? '');
+    _phoneCtrl = TextEditingController(text: existing?['phone'] ?? '');
+    _addressCtrl = TextEditingController(text: existing?['address'] ?? '');
+    _selectedProvince = existing?['province_id'];
+    _selectedRegency = existing?['regency_id'];
+    _selectedDistrict = existing?['district_id'];
+    _selectedVillage = existing?['village_id'];
+    _loadInitialLocations();
+  }
+
+  @override
+  void dispose() {
+    _labelCtrl.dispose();
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _addressCtrl.dispose();
+    super.dispose();
+  }
+
+  List<dynamic> _extractList(dynamic value) {
+    if (value is List) return value;
+    if (value is Map) {
+      final nested =
+          value['data'] ?? value['items'] ?? value['rows'] ?? value['results'];
+      if (nested is List) return nested;
+    }
+    return [];
+  }
+
+  String? _firstString(Map item, List<String> keys) {
+    for (final key in keys) {
+      final value = item[key];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString();
+      }
+    }
+    return null;
+  }
+
+  List<Map<String, String>> _locationOptionsFrom(dynamic data) {
+    final options = <Map<String, String>>[];
+    for (final item in _extractList(data)) {
+      if (item is Map) {
+        final id = _firstString(item, const ['id', 'kode', 'code', 'value']);
+        final name = _firstString(item, const [
+          'nama',
+          'name',
+          'nama_kota',
+          'nama_kabupaten',
+          'regency_name',
+          'city_name',
+        ]);
+        if (id != null && name != null) {
+          options.add({'id': id, 'name': name});
+        }
+      } else {
+        final value = item.toString().trim();
+        if (value.isNotEmpty) options.add({'id': value, 'name': value});
+      }
+    }
+    return options;
+  }
+
+  String _nameFor(List<Map<String, String>> options, String? id) {
+    if (id == null) return '';
+    for (final option in options) {
+      if (option['id'] == id) return option['name'] ?? '';
+    }
+    return '';
+  }
+
+  String? _validValue(List<Map<String, String>> options, String? value) {
+    if (value == null) return null;
+    return options.any((option) => option['id'] == value) ? value : null;
+  }
+
+  Future<void> _loadInitialLocations() async {
+    await _loadProvinces();
+    if (!mounted) return;
+    if (_selectedProvince != null) await _loadRegencies(_selectedProvince!);
+    if (!mounted) return;
+    if (_selectedRegency != null) await _loadDistricts(_selectedRegency!);
+    if (!mounted) return;
+    if (_selectedDistrict != null) await _loadVillages(_selectedDistrict!);
+  }
+
+  Future<void> _loadProvinces() async {
+    setState(() => _loadingProvinces = true);
+    try {
+      final res = await Http().getProvinces(perPage: _locationPerPage);
+      final options = _locationOptionsFrom(res['data']);
+      if (!mounted) return;
+      setState(() {
+        _provinces = options;
+        _selectedProvince = _validValue(options, _selectedProvince);
+      });
+    } finally {
+      if (mounted) setState(() => _loadingProvinces = false);
+    }
+  }
+
+  Future<void> _loadRegencies(String provinceId) async {
+    setState(() => _loadingRegencies = true);
+    try {
+      final res = await Http()
+          .getRegencies(provinceId: provinceId, perPage: _locationPerPage);
+      final options = _locationOptionsFrom(res['data']);
+      if (!mounted) return;
+      setState(() {
+        _regencies = options;
+        _selectedRegency = _validValue(options, _selectedRegency);
+      });
+    } finally {
+      if (mounted) setState(() => _loadingRegencies = false);
+    }
+  }
+
+  Future<void> _loadDistricts(String regencyId) async {
+    setState(() => _loadingDistricts = true);
+    try {
+      final res = await Http()
+          .getDistricts(regencyId: regencyId, perPage: _locationPerPage);
+      final options = _locationOptionsFrom(res['data']);
+      if (!mounted) return;
+      setState(() {
+        _districts = options;
+        _selectedDistrict = _validValue(options, _selectedDistrict);
+      });
+    } finally {
+      if (mounted) setState(() => _loadingDistricts = false);
+    }
+  }
+
+  Future<void> _loadVillages(String districtId) async {
+    setState(() => _loadingVillages = true);
+    try {
+      final res = await Http()
+          .getVillages(districtId: districtId, perPage: _locationPerPage);
+      final options = _locationOptionsFrom(res['data']);
+      if (!mounted) return;
+      setState(() {
+        _villages = options;
+        _selectedVillage = _validValue(options, _selectedVillage);
+      });
+    } finally {
+      if (mounted) setState(() => _loadingVillages = false);
+    }
+  }
+
+  void _onProvinceChanged(String? provinceId) {
+    setState(() {
+      _selectedProvince = provinceId;
+      _selectedRegency = null;
+      _selectedDistrict = null;
+      _selectedVillage = null;
+      _regencies = [];
+      _districts = [];
+      _villages = [];
+    });
+    if (provinceId != null) _loadRegencies(provinceId);
+  }
+
+  void _onRegencyChanged(String? regencyId) {
+    setState(() {
+      _selectedRegency = regencyId;
+      _selectedDistrict = null;
+      _selectedVillage = null;
+      _districts = [];
+      _villages = [];
+    });
+    if (regencyId != null) _loadDistricts(regencyId);
+  }
+
+  void _onDistrictChanged(String? districtId) {
+    setState(() {
+      _selectedDistrict = districtId;
+      _selectedVillage = null;
+      _villages = [];
+    });
+    if (districtId != null) _loadVillages(districtId);
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+
+    final provinceName = _nameFor(_provinces, _selectedProvince);
+    final regencyName = _nameFor(_regencies, _selectedRegency);
+    final districtName = _nameFor(_districts, _selectedDistrict);
+    final villageName = _nameFor(_villages, _selectedVillage);
+    final locationSummary = [
+      villageName,
+      districtName,
+      regencyName,
+      provinceName,
+    ].where((value) => value.isNotEmpty).join(', ');
+
+    widget.onSubmit({
+      'label': _labelCtrl.text.trim(),
+      'name': _nameCtrl.text.trim(),
+      'phone': _phoneCtrl.text.trim(),
+      'address': _addressCtrl.text.trim(),
+      'city': locationSummary,
+      'province_id': _selectedProvince ?? '',
+      'province': provinceName,
+      'regency_id': _selectedRegency ?? '',
+      'regency': regencyName,
+      'district_id': _selectedDistrict ?? '',
+      'district': districtName,
+      'village_id': _selectedVillage ?? '',
+      'village': villageName,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                widget.editIndex != null ? 'Edit Alamat' : 'Tambah Alamat',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF111827),
+                ),
+              ),
+              const SizedBox(height: 20),
+              _BottomSheetField(
+                controller: _labelCtrl,
+                label: 'Label (contoh: Rumah, Kantor)',
+                icon: Icons.label_outline_rounded,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Label tidak boleh kosong'
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              _BottomSheetField(
+                controller: _nameCtrl,
+                label: 'Nama Penerima',
+                icon: Icons.person_outline_rounded,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Nama tidak boleh kosong'
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              _BottomSheetField(
+                controller: _phoneCtrl,
+                label: 'No. Telepon',
+                icon: Icons.phone_outlined,
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 12),
+              _BottomSheetDropdown(
+                value: _validValue(_provinces, _selectedProvince),
+                label: _loadingProvinces ? 'Memuat provinsi...' : 'Provinsi',
+                icon: Icons.map_outlined,
+                items: _provinces,
+                onChanged: _loadingProvinces ? null : _onProvinceChanged,
+                validator: (v) => v == null ? 'Pilih provinsi' : null,
+              ),
+              const SizedBox(height: 12),
+              _BottomSheetDropdown(
+                value: _validValue(_regencies, _selectedRegency),
+                label: _loadingRegencies
+                    ? 'Memuat kota/kabupaten...'
+                    : 'Kota/Kabupaten',
+                icon: Icons.location_city_outlined,
+                items: _regencies,
+                onChanged: _selectedProvince == null || _loadingRegencies
+                    ? null
+                    : _onRegencyChanged,
+                validator: (v) => v == null ? 'Pilih kota/kabupaten' : null,
+              ),
+              const SizedBox(height: 12),
+              _BottomSheetDropdown(
+                value: _validValue(_districts, _selectedDistrict),
+                label: _loadingDistricts ? 'Memuat kecamatan...' : 'Kecamatan',
+                icon: Icons.account_balance_outlined,
+                items: _districts,
+                onChanged: _selectedRegency == null || _loadingDistricts
+                    ? null
+                    : _onDistrictChanged,
+                validator: (v) => v == null ? 'Pilih kecamatan' : null,
+              ),
+              const SizedBox(height: 12),
+              _BottomSheetDropdown(
+                value: _validValue(_villages, _selectedVillage),
+                label: _loadingVillages ? 'Memuat kelurahan...' : 'Kelurahan',
+                icon: Icons.place_outlined,
+                items: _villages,
+                onChanged: _selectedDistrict == null || _loadingVillages
+                    ? null
+                    : (value) => setState(() => _selectedVillage = value),
+                validator: (v) => v == null ? 'Pilih kelurahan' : null,
+              ),
+              const SizedBox(height: 12),
+              _BottomSheetField(
+                controller: _addressCtrl,
+                label: 'Detail Alamat',
+                icon: Icons.location_on_outlined,
+                maxLines: 2,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Detail alamat tidak boleh kosong'
+                    : null,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: FilledButton(
+                  onPressed: _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text(
+                    widget.editIndex != null
+                        ? 'Simpan Perubahan'
+                        : 'Tambah Alamat',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EmptyAddressView extends StatelessWidget {
   const _EmptyAddressView();
 
@@ -408,6 +702,69 @@ class _EmptyAddressView extends StatelessWidget {
             style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _BottomSheetDropdown extends StatelessWidget {
+  const _BottomSheetDropdown({
+    required this.value,
+    required this.label,
+    required this.icon,
+    required this.items,
+    required this.onChanged,
+    this.validator,
+  });
+
+  final String? value;
+  final String label;
+  final IconData icon;
+  final List<Map<String, String>> items;
+  final ValueChanged<String?>? onChanged;
+  final String? Function(String?)? validator;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      items: items
+          .map(
+            (item) => DropdownMenuItem<String>(
+              value: item['id'],
+              child: Text(item['name'] ?? ''),
+            ),
+          )
+          .toList(),
+      onChanged: onChanged,
+      validator: validator,
+      isExpanded: true,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF111827),
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, size: 20, color: const Color(0xFF64748B)),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFEF4444)),
+        ),
       ),
     );
   }

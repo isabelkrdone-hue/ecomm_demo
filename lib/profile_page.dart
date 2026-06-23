@@ -15,6 +15,7 @@ import 'payment_method_page.dart';
 import 'profile_model.dart';
 import 'seller_center_page.dart' show SellerCenterPage;
 import 'seller_verification_page.dart';
+import 'sessions.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -54,9 +55,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
       final http = Http();
       // attach token if available
-      final token = prefs.getString('access_token');
+      final token = await Sessions.getToken();
       if (token != null && token.isNotEmpty) {
-        http.dio.options.headers['Authorization'] = 'Bearer $token';
+        http.setToken(token);
         _logger.i('Logout: attached token (length=${token.length})');
       } else {
         _logger.w('Logout: no token found in prefs');
@@ -68,8 +69,12 @@ class _ProfilePageState extends State<ProfilePage> {
       // clear local login state regardless of API result to ensure user is logged out locally
       try {
         await prefs.setBool('isLoggedIn', false);
-        await prefs.remove('access_token');
-        _logger.i('Cleared local login state and token');
+        await Sessions.clearLoginSession();
+        http.clearToken();
+        _logger.i(
+          'Logout: cleared isLoggedIn, token, userId, name, email, phone, '
+          'roleId, role, and Authorization header',
+        );
       } catch (e) {
         _logger.w('Failed to clear prefs during logout: $e');
       }
@@ -102,8 +107,12 @@ class _ProfilePageState extends State<ProfilePage> {
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('isLoggedIn', false);
-        await prefs.remove('access_token');
-        _logger.i('Cleared local login state after error');
+        await Sessions.clearLoginSession();
+        Http().clearToken();
+        _logger.i(
+          'Logout error fallback: cleared isLoggedIn, token, userId, name, '
+          'email, phone, roleId, role, and Authorization header',
+        );
       } catch (err) {
         _logger.w('Failed to clear prefs after logout error: $err');
       }
@@ -146,7 +155,8 @@ class _ProfilePageState extends State<ProfilePage> {
             final avatarSize = constraints.maxWidth > 600 ? 76.0 : 64.0;
 
             return ListView(
-              padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, 24),
+              padding: EdgeInsets.fromLTRB(
+                  horizontalPadding, 0, horizontalPadding, 24),
               children: [
                 _ProfileHeaderCard(
                   avatarSize: avatarSize,

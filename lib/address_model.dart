@@ -13,14 +13,14 @@ class AddressModel extends ChangeNotifier {
       'name': 'Isabel',
       'phone': '+62 812-3456-7890',
       'address': 'Jl. Mawar No. 12, Kel. Sukamaju, Kec. Cilandak',
-      'city': 'Jakarta Selatan, DKI Jakarta 12430',
+      'city': 'Jakarta Selatan, DKI Jakarta',
     },
     {
       'label': 'Kantor',
       'name': 'Isabel (Kantor)',
       'phone': '+62 812-3456-7890',
       'address': 'Gedung Graha Niaga Lt. 5, Jl. Sudirman No. 52',
-      'city': 'Jakarta Pusat, DKI Jakarta 10220',
+      'city': 'Jakarta Pusat, DKI Jakarta',
     },
   ];
 
@@ -48,6 +48,18 @@ class AddressModel extends ChangeNotifier {
 
   void addAddress(Map<String, String> address) {
     _addresses.add(Map<String, String>.from(address));
+    notifyListeners();
+  }
+
+  void replaceAddresses(List<Map<String, String>> addresses) {
+    _addresses
+      ..clear()
+      ..addAll(addresses.map(Map<String, String>.from));
+    if (_addresses.isEmpty) {
+      _selectedIndex = 0;
+    } else if (_selectedIndex >= _addresses.length) {
+      _selectedIndex = _addresses.length - 1;
+    }
     notifyListeners();
   }
 
