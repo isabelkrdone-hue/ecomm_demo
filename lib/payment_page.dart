@@ -1,14 +1,16 @@
-﻿import 'dart:math';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'address_model.dart';
+import 'address_location_resolver.dart';
 import 'app_ui.dart';
 import 'cart_model.dart';
 import 'dashboard_page.dart';
 import 'my_address_page.dart';
 import 'order_history_model.dart';
+import 'repository/http.dart';
 
 const Color _appPrimary = Color(0xFF2563EB);
 const Color _appBackground = Color(0xFFF8FAFC);
@@ -185,7 +187,8 @@ class PaymentPage extends StatefulWidget {
 
 class _PaymentPageState extends State<PaymentPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final TextEditingController _eWalletNumberController = TextEditingController();
+  final TextEditingController _eWalletNumberController =
+      TextEditingController();
   final TextEditingController _pinController = TextEditingController();
   final TextEditingController _cardNumberController = TextEditingController();
   final TextEditingController _cardHolderController = TextEditingController();
@@ -203,6 +206,7 @@ class _PaymentPageState extends State<PaymentPage> {
   void initState() {
     super.initState();
     _generateVirtualAccount();
+    _loadAddressesFromApi();
   }
 
   @override
@@ -228,6 +232,131 @@ class _PaymentPageState extends State<PaymentPage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  List<dynamic> _extractList(dynamic value) {
+    if (value is List) return value;
+    if (value is Map) {
+      final nested =
+          value['data'] ?? value['items'] ?? value['rows'] ?? value['results'];
+      if (nested is List) return nested;
+    }
+    return [];
+  }
+
+  String? _firstString(Map item, List<String> keys) {
+    for (final key in keys) {
+      final value = item[key];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString();
+      }
+    }
+    return null;
+  }
+
+  bool _firstBool(Map item, List<String> keys) {
+    for (final key in keys) {
+      final value = item[key];
+      if (value == null) continue;
+      if (value is bool) return value;
+      final normalized = value.toString().trim().toLowerCase();
+      if (normalized.isEmpty) continue;
+      return normalized == '1' || normalized == 'true' || normalized == 'yes';
+    }
+    return false;
+  }
+
+  bool _looksLikeLocationId(String? value) {
+    if (value == null) return false;
+    final normalized = value.trim();
+    if (normalized.isEmpty) return false;
+    return RegExp(
+          r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+        ).hasMatch(normalized) ||
+        RegExp(r'^\d+$').hasMatch(normalized);
+  }
+
+  Map<String, String> _mapAddressFromApi(Map item) {
+    final id = _firstString(item, const ['id', 'uuid']);
+    final penerima = _firstString(item, const ['penerima', 'name', 'nama']);
+    final phone =
+        _firstString(item, const ['phone', 'phone_number', 'telepon']);
+    final alamat = _firstString(item, const ['alamat', 'address', 'detail']);
+    final provinsi = _firstString(item, const ['provinsi', 'province']);
+    final kota = _firstString(item, const ['kota', 'city', 'kabupaten']);
+    final kecamatan = _firstString(item, const ['kecamatan', 'district']);
+    final desa = _firstString(item, const ['desa', 'village', 'kelurahan']);
+    final kodePos =
+        _firstString(item, const ['kode_pos', 'kodePos', 'postal_code']);
+
+    final String provinceId =
+        _firstString(item, const ['province_id', 'provinsi_id']) ??
+            (_looksLikeLocationId(provinsi) ? provinsi! : '');
+    final String regencyId =
+        _firstString(item, const ['regency_id', 'kota_id']) ??
+            (_looksLikeLocationId(kota) ? kota! : '');
+    final String districtId =
+        _firstString(item, const ['district_id', 'kecamatan_id']) ??
+            (_looksLikeLocationId(kecamatan) ? kecamatan! : '');
+    final String villageId =
+        _firstString(item, const ['village_id', 'desa_id']) ??
+            (_looksLikeLocationId(desa) ? desa! : '');
+
+    final cityParts = <String>[
+      if (kota != null && kota.isNotEmpty) kota,
+      if (provinsi != null && provinsi.isNotEmpty) provinsi,
+    ];
+
+    return {
+      if (id != null) 'id': id,
+      'label': _firstString(item, const ['label', 'nama_label']) ?? 'Alamat',
+      'name': penerima ?? '',
+      'phone': phone ?? '',
+      'address': alamat ?? '',
+      'city': cityParts.join(', '),
+      'province_id': provinceId,
+      'province': provinsi ?? '',
+      'regency_id': regencyId,
+      'regency': kota ?? '',
+      'district_id': districtId,
+      'district': kecamatan ?? '',
+      'village_id': villageId,
+      'village': desa ?? '',
+      'postal_code': kodePos ?? '',
+      'is_default': _firstBool(item, const ['is_default']).toString(),
+      'is_active': _firstBool(item, const ['is_active']).toString(),
+    };
+  }
+
+  List<Map<String, String>> _addressesFromResponse(dynamic data) {
+    final addresses = <Map<String, String>>[];
+    for (final item in _extractList(data)) {
+      if (item is Map) {
+        addresses.add(_mapAddressFromApi(item));
+      }
+    }
+    return addresses;
+  }
+
+  Future<void> _loadAddressesFromApi() async {
+    final res = await Http().getAlamatPengiriman();
+    if (!mounted || res['success'] != true) return;
+
+    final addresses = await AddressLocationResolver.instance.resolveAddresses(
+      _addressesFromResponse(res['data']),
+    );
+    if (!mounted) return;
+    final addressModel = AddressModel.instance;
+    addressModel.replaceAddresses(addresses);
+
+    final selectedDefaultIndex = addressModel.addresses.indexWhere(
+      (item) => item['is_default'] == 'true' || item['is_default'] == '1',
+    );
+    if (selectedDefaultIndex >= 0) {
+      addressModel.setSelected(selectedDefaultIndex);
+    }
+
+    if (mounted) setState(() {});
   }
 
   Future<void> _handlePayment() async {
@@ -331,7 +460,8 @@ class _PaymentPageState extends State<PaymentPage> {
     return widget.totalHarga + (_selectedShipping?.price ?? 0);
   }
 
-  InputDecoration _inputDecoration({required String label, required String hint}) {
+  InputDecoration _inputDecoration(
+      {required String label, required String hint}) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
@@ -450,7 +580,8 @@ class _PaymentPageState extends State<PaymentPage> {
                 _buildSectionHeader(
                   icon: Icons.account_balance_wallet_rounded,
                   title: 'E-Wallet Flow',
-                  subtitle: 'Pilih DANA, OVO, atau GoPay lalu masukkan nomor akun dan PIN.',
+                  subtitle:
+                      'Pilih DANA, OVO, atau GoPay lalu masukkan nomor akun dan PIN.',
                   primary: _appPrimary,
                 ),
                 const SizedBox(height: 16),
@@ -543,7 +674,8 @@ class _PaymentPageState extends State<PaymentPage> {
                 _buildSectionHeader(
                   icon: Icons.account_balance_rounded,
                   title: 'Bank Transfer Flow',
-                  subtitle: 'Pilih bank lalu transfer ke virtual account yang tersedia.',
+                  subtitle:
+                      'Pilih bank lalu transfer ke virtual account yang tersedia.',
                   primary: _appPrimary,
                 ),
                 const SizedBox(height: 16),
@@ -639,15 +771,18 @@ class _PaymentPageState extends State<PaymentPage> {
                 _buildSectionHeader(
                   icon: Icons.credit_card_rounded,
                   title: 'Kartu Kredit Flow',
-                  subtitle: 'Gunakan kartu Visa atau Mastercard untuk simulasi pembayaran.',
+                  subtitle:
+                      'Gunakan kartu Visa atau Mastercard untuk simulasi pembayaran.',
                   primary: _appPrimary,
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    _buildCardBrandChip(label: 'VISA', color: const Color(0xFF1A1F71)),
+                    _buildCardBrandChip(
+                        label: 'VISA', color: const Color(0xFF1A1F71)),
                     const SizedBox(width: 10),
-                    _buildCardBrandChip(label: 'Mastercard', color: const Color(0xFFEB001B)),
+                    _buildCardBrandChip(
+                        label: 'Mastercard', color: const Color(0xFFEB001B)),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -710,7 +845,8 @@ class _PaymentPageState extends State<PaymentPage> {
                           if (formatted.isEmpty) {
                             return 'Expiry date wajib diisi';
                           }
-                          if (!RegExp(r'^(0[1-9]|1[0-2])\/\d{2}$').hasMatch(formatted)) {
+                          if (!RegExp(r'^(0[1-9]|1[0-2])\/\d{2}$')
+                              .hasMatch(formatted)) {
                             return 'Expiry date tidak valid';
                           }
                           return null;
@@ -927,13 +1063,15 @@ class _PaymentPageState extends State<PaymentPage> {
                       children: [
                         const Text(
                           'Ringkasan',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Subtotal', style: TextStyle(color: subText)),
+                            const Text('Subtotal',
+                                style: TextStyle(color: subText)),
                             Text(
                               CartModel.formatPrice(widget.totalHarga),
                               style: const TextStyle(
@@ -947,9 +1085,11 @@ class _PaymentPageState extends State<PaymentPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Ongkos Kirim', style: TextStyle(color: subText)),
+                            const Text('Ongkos Kirim',
+                                style: TextStyle(color: subText)),
                             Text(
-                              CartModel.formatPrice(_selectedShipping?.price ?? 0),
+                              CartModel.formatPrice(
+                                  _selectedShipping?.price ?? 0),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                                 color: textColor,
@@ -961,7 +1101,10 @@ class _PaymentPageState extends State<PaymentPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Total', style: TextStyle(color: subText, fontWeight: FontWeight.w700)),
+                            const Text('Total',
+                                style: TextStyle(
+                                    color: subText,
+                                    fontWeight: FontWeight.w700)),
                             Text(
                               CartModel.formatPrice(_totalWithShipping),
                               style: const TextStyle(
@@ -976,10 +1119,12 @@ class _PaymentPageState extends State<PaymentPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Metode', style: TextStyle(color: subText)),
+                            const Text('Metode',
+                                style: TextStyle(color: subText)),
                             Text(
                               _selectedPaymentLabel,
-                              style: const TextStyle(fontWeight: FontWeight.w700),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
                             ),
                           ],
                         ),
@@ -1001,7 +1146,8 @@ class _PaymentPageState extends State<PaymentPage> {
                     ),
                     child: const Text(
                       'Bayar Sekarang',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -1101,8 +1247,8 @@ class _PaymentPageState extends State<PaymentPage> {
                     setState(() {});
                   },
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                   child: const Text(
                     'Ubah',
@@ -1377,11 +1523,11 @@ class _PaymentPageState extends State<PaymentPage> {
                     color: isSelected ? _appPrimary : const Color(0xFF111827),
                   ),
                 ),
-                if (isSelected)
-                  const SizedBox(height: 4),
+                if (isSelected) const SizedBox(height: 4),
                 if (isSelected)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: _appPrimary,
                       borderRadius: BorderRadius.circular(999),

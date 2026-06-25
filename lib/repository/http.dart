@@ -677,7 +677,7 @@ class Http {
       final response = await dio.get(
         'alamat-pengiriman',
         queryParameters: {
-          'is_active': isActive,
+          'is_active': _boolQuery(isActive),
           'per_page': perPage,
         },
       );
@@ -724,6 +724,7 @@ class Http {
       final response = await dio.post(
         'alamat-pengiriman',
         data: {
+          if (userId != null) 'user_id': userId,
           'penerima': penerima,
           'phone': phone,
           'alamat': alamat,
@@ -763,6 +764,7 @@ class Http {
       final response = await dio.put(
         'alamat-pengiriman/$id',
         data: {
+          if (userId != null) 'user_id': userId,
           'penerima': penerima,
           'phone': phone,
           'alamat': alamat,
@@ -830,6 +832,45 @@ class Http {
     try {
       final response = await dio.get(
         'ekspedisi/$id',
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getMetodePembayaran({
+    bool isActive = true,
+    int perPage = 100,
+  }) async {
+    try {
+      final response = await dio.get(
+        'metode-pembayaran',
+        queryParameters: {
+          'is_active': _boolQuery(isActive),
+          'per_page': perPage,
+        },
+      );
+
+      return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data ?? e.message,
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getMetodePembayaranDetail(
+    String id,
+  ) async {
+    try {
+      final response = await dio.get(
+        'metode-pembayaran/$id',
       );
 
       return Map<String, dynamic>.from(response.data);

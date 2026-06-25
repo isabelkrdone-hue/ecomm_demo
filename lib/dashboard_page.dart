@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,13 +8,14 @@ import 'app_ui_skeletons.dart';
 import 'business_detail_page.dart';
 import 'business_model.dart';
 import 'cart_model.dart';
+import 'address_model.dart';
 import 'shop_image.dart';
 import 'cart_page.dart';
 import 'login_page.dart';
+import 'my_address_page.dart';
 import 'profile_page.dart';
 import 'product_data.dart';
 import 'product_detail_page.dart';
-import 'promo_detail_page.dart';
 import 'add_product_page.dart';
 import 'repository/http.dart';
 import 'sessions.dart';
@@ -48,7 +50,6 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     const background = Colors.white;
-    const primary = Color(0xFFFF6B00);
 
     return Scaffold(
       backgroundColor: background,
@@ -72,7 +73,7 @@ class _DashboardPageState extends State<DashboardPage> {
           onTap: _onTap,
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
-          selectedItemColor: primary,
+          selectedItemColor: const Color(0xFF2563EB),
           unselectedItemColor: const Color(0xFF111827),
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
@@ -87,7 +88,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_outline_rounded),
-              label: 'Alibaba ...',
+              label: 'Akun',
             ),
           ],
         ),
@@ -132,6 +133,7 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
   void initState() {
     super.initState();
     BusinessModel.instance.addListener(_onBusinessDataChanged);
+    AddressModel.instance.addListener(_onAddressDataChanged);
     _loadAllProducts();
     _applyAllFilters();
     Future<void>.delayed(const Duration(milliseconds: 900), () {
@@ -250,6 +252,7 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
   @override
   void dispose() {
     BusinessModel.instance.removeListener(_onBusinessDataChanged);
+    AddressModel.instance.removeListener(_onAddressDataChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -380,27 +383,26 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
         final matchSearch = query.isEmpty ||
             name.contains(query) ||
             businessName.contains(query) ||
-            category.toLowerCase().contains(query);
-
-        // When searching, be more lenient with filters
-        if (query.isNotEmpty) {
-          // Only apply category filter if specifically selected (not default)
-          final matchCategory = selectedCategoryKey == 'semua' ||
-              categoryKey == selectedCategoryKey;
-          return matchSearch && matchCategory;
-        } else {
-          // When not searching, apply all filters normally
-          final matchCategory = selectedCategoryKey == 'semua' ||
-              categoryKey == selectedCategoryKey;
-          final matchFilterCategory = selectedFilterCategoryKey == 'semua' ||
-              categoryKey == selectedFilterCategoryKey;
-          final matchPrice = price >= selectedPriceRange.start &&
-              price <= selectedPriceRange.end;
-          return matchSearch &&
-              matchCategory &&
-              matchFilterCategory &&
-              matchPrice;
-        }
+            category.toLowerCase().contains(query) ||
+            (product['description'] as String? ?? '')
+                .toLowerCase()
+                .contains(query) ||
+            (product['businessCity'] as String? ?? '')
+                .toLowerCase()
+                .contains(query) ||
+            (product['businessProvince'] as String? ?? '')
+                .toLowerCase()
+                .contains(query);
+        final matchCategory = selectedCategoryKey == 'semua' ||
+            categoryKey == selectedCategoryKey;
+        final matchFilterCategory = selectedFilterCategoryKey == 'semua' ||
+            categoryKey == selectedFilterCategoryKey;
+        final matchPrice = price >= selectedPriceRange.start &&
+            price <= selectedPriceRange.end;
+        return matchSearch &&
+            matchCategory &&
+            matchFilterCategory &&
+            matchPrice;
       }).toList();
 
       final allBusinesses = BusinessModel.instance.getAllBusinesses();
@@ -476,6 +478,11 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
     _applyAllFilters();
   }
 
+  void _onAddressDataChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
   void _searchProducts(String query) {
     _searchQuery = query;
     _applyAllFilters();
@@ -533,6 +540,21 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
 
     String tempCategory = selectedFilterCategory;
     RangeValues tempRange = selectedPriceRange;
+    final minPriceController =
+        TextEditingController(text: tempRange.start.round().toString());
+    final maxPriceController =
+        TextEditingController(text: tempRange.end.round().toString());
+
+    int? parsePriceInput(String value) {
+      final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+      if (digits.isEmpty) return null;
+      return int.tryParse(digits);
+    }
+
+    void syncControllersFromRange() {
+      minPriceController.text = tempRange.start.round().toString();
+      maxPriceController.text = tempRange.end.round().toString();
+    }
 
     showModalBottomSheet<void>(
       context: context,
@@ -625,6 +647,102 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: minPriceController,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              decoration: InputDecoration(
+                                labelText: 'Harga min',
+                                prefixText: 'Rp ',
+                                filled: true,
+                                fillColor: const Color(0xFFF8FAFC),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                              ),
+                              onChanged: (value) {
+                                final parsed = parsePriceInput(value);
+                                if (parsed == null) return;
+                                setModalState(() {
+                                  final nextMin =
+                                      parsed.clamp(0, 10000000).toInt();
+                                  final currentMax =
+                                      tempRange.end.round().toInt();
+                                  final nextMax = nextMin > currentMax
+                                      ? nextMin
+                                      : currentMax;
+                                  tempRange = RangeValues(
+                                    nextMin.toDouble(),
+                                    nextMax.toDouble(),
+                                  );
+                                  syncControllersFromRange();
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: maxPriceController,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              decoration: InputDecoration(
+                                labelText: 'Harga max',
+                                prefixText: 'Rp ',
+                                filled: true,
+                                fillColor: const Color(0xFFF8FAFC),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                              ),
+                              onChanged: (value) {
+                                final parsed = parsePriceInput(value);
+                                if (parsed == null) return;
+                                setModalState(() {
+                                  final nextMax =
+                                      parsed.clamp(0, 10000000).toInt();
+                                  final currentMin =
+                                      tempRange.start.round().toInt();
+                                  final nextMin = nextMax < currentMin
+                                      ? nextMax
+                                      : currentMin;
+                                  tempRange = RangeValues(
+                                    nextMin.toDouble(),
+                                    nextMax.toDouble(),
+                                  );
+                                  syncControllersFromRange();
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       RangeSlider(
                         values: tempRange,
                         min: 0,
@@ -634,6 +752,7 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
                         onChanged: (values) {
                           setModalState(() {
                             tempRange = values;
+                            syncControllersFromRange();
                           });
                         },
                       ),
@@ -677,15 +796,16 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      minPriceController.dispose();
+      maxPriceController.dispose();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final producerSections = _producerSections();
-
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF6F7FB),
       body: _isLoading
           ? const DashboardSkeleton()
           : ListView(
@@ -696,11 +816,18 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
                 24,
               ),
               children: [
-                _buildProducerTabs(),
-                const SizedBox(height: 16),
-                _buildAlibabaSearchBar(context),
+                _buildMarketplaceHeader(context),
                 const SizedBox(height: 18),
-                _buildProducerCategoryBar(),
+                _buildSearchBar(context),
+                const SizedBox(height: 16),
+                _buildSectionHeader('Categories'),
+                const SizedBox(height: 12),
+                _buildCategoryRail(),
+                const SizedBox(height: 20),
+                _buildSectionHeader(
+                  'Most Views',
+                  trailing: 'See all',
+                ),
                 const SizedBox(height: 12),
                 if (filteredProducts.isEmpty)
                   Container(
@@ -717,13 +844,32 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
                     ),
                   )
                 else
-                  ListView.separated(
+                  GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: producerSections.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 22),
-                    itemBuilder: (context, index) =>
-                        _buildProducerSection(producerSections[index]),
+                    itemCount: filteredProducts.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 0.54,
+                    ),
+                    itemBuilder: (context, index) {
+                      final product = filteredProducts[index];
+                      return _buildProductCard(
+                        context: context,
+                        index: index,
+                        product: product,
+                        name: product['name'] as String? ?? 'Produk',
+                        price: _priceText(product['price']),
+                        imageUrl: _textValue(
+                          product['image'],
+                          fallback: 'assets/images/placeholder.png',
+                        ),
+                        isFavorite: _favoriteIndexes.contains(index),
+                      );
+                    },
                   ),
               ],
             ),
@@ -731,11 +877,11 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
   }
 
   Widget _buildProducerTabs() {
-    const tabs = ['Mode AI', 'Produk', 'Produsen', 'Global'];
+    const tabs = ['Ikhtisar', 'Produk', 'Toko', 'Global'];
 
     return Row(
       children: List.generate(tabs.length, (index) {
-        final isActive = tabs[index] == 'Produsen';
+        final isActive = tabs[index] == 'Toko';
         return Padding(
           padding: EdgeInsets.only(right: index == tabs.length - 1 ? 0 : 22),
           child: Column(
@@ -766,7 +912,7 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
     );
   }
 
-  Widget _buildAlibabaSearchBar(BuildContext context) {
+  Widget _buildLegacySearchBar(BuildContext context) {
     return Container(
       height: 58,
       decoration: BoxDecoration(
@@ -826,460 +972,25 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
     );
   }
 
-  Widget _buildProducerCategoryBar() {
-    final categories = _availableProductCategories();
-
+  Widget _buildCategoryRail() {
     return SizedBox(
-      height: 48,
-      child: ListView.separated(
+      height: 120,
+      child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: categories.length + 1,
-        separatorBuilder: (_, __) => const SizedBox(width: 22),
+        itemCount: _categories.length,
         itemBuilder: (context, index) {
-          if (index == categories.length) {
-            return const Center(
-              child: Icon(Icons.keyboard_arrow_down_rounded, size: 30),
-            );
-          }
-          final title = categories[index];
-          final isActive = selectedCategory == title ||
-              (selectedCategory == 'Semua' && title == 'Semua');
-          return InkWell(
-            onTap: () => _filterByCategory(title),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: isActive ? FontWeight.w800 : FontWeight.w700,
-                    color: isActive
-                        ? const Color(0xFF111827)
-                        : const Color(0xFF6B7280),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: isActive ? 76 : 0,
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111827),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ],
-            ),
+          final category = _categories[index];
+          final name = category['name'] as String? ?? '';
+          final icon = category['icon'] as IconData? ?? Icons.apps_rounded;
+          final isActive = selectedCategory == name;
+          return _buildCategoryItem(
+            context: context,
+            index: index,
+            name: name,
+            icon: icon,
+            isActive: isActive,
           );
         },
-      ),
-    );
-  }
-
-  List<Map<String, dynamic>> _producerSections() {
-    final sections = <Map<String, dynamic>>[];
-    final businesses = BusinessModel.instance.getAllBusinesses();
-    final products = filteredProducts;
-
-    if (businesses.isNotEmpty) {
-      for (final business in businesses) {
-        final name = business['name'] as String? ?? 'Produsen';
-        final businessProducts = products
-            .where((product) => product['businessName'] == name)
-            .take(3)
-            .toList();
-        if (businessProducts.isEmpty) continue;
-        sections.add({
-          'business': business,
-          'products': businessProducts,
-        });
-      }
-    }
-
-    final usedCount = sections.fold<int>(
-      0,
-      (total, section) => total + ((section['products'] as List?)?.length ?? 0),
-    );
-    final remaining = products.skip(usedCount).toList();
-
-    for (var i = 0; i < remaining.length; i += 3) {
-      final chunk = remaining.skip(i).take(3).toList();
-      if (chunk.isEmpty) continue;
-      sections.add({
-        'business': {
-          'name': i == 0
-              ? 'Shenzhen Home Design Houseware Ltd'
-              : 'Guangzhou High Hip-Hop Amusement Eq...',
-          'verificationStatus': 'verified',
-          'city': i == 0 ? 'Shenzhen' : 'Guangzhou',
-          'province': 'China',
-          'products': chunk,
-        },
-        'products': chunk,
-      });
-    }
-
-    for (var i = 0; i < sections.length; i++) {
-      sections[i]['isFirst'] = i == 0;
-    }
-
-    return sections;
-  }
-
-  Widget _buildProducerSection(Map<String, dynamic> section) {
-    final business = Map<String, dynamic>.from(section['business'] as Map);
-    final products =
-        List<Map<String, dynamic>>.from(section['products'] as List);
-    final firstSection = section['isFirst'] == true;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (firstSection)
-          const Padding(
-            padding: EdgeInsets.only(left: 92, bottom: 14),
-            child: Text(
-              'Desain kustom dalam 3 hari · Pengiriman tepat waktu 100.0%',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Color(0xFF6B7280),
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        _buildProducerProductRow(products),
-        const SizedBox(height: 14),
-        _buildProducerInfo(business),
-        const SizedBox(height: 8),
-        Text(
-          firstSection
-              ? 'Desain kustom dalam 3 hari · Waktu respons ≤3h'
-              : 'Layanan ODM tersedia · Kustomisasi Minor',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Color(0xFF6B7280),
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProducerProductRow(List<Map<String, dynamic>> products) {
-    return Row(
-      children: List.generate(3, (index) {
-        final product =
-            index < products.length ? products[index] : products.last;
-        return Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(right: index == 2 ? 0 : 8),
-            child: _buildMiniProductCard(product),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildMiniProductCard(Map<String, dynamic> product) {
-    final price = _priceText(product['price']);
-    final unit = _textValue(
-      product['unit'] ?? product['satuan'] ?? product['category'],
-      fallback: 'Buah',
-    );
-
-    return TapScale(
-      onTap: () {
-        Navigator.of(context).push(
-          buildPageRoute(ProductDetailPage(product: product)),
-        );
-      },
-      borderRadius: BorderRadius.circular(6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: ShopImage(
-                    imagePath: _textValue(
-                      product['image'],
-                      fallback: 'assets/images/placeholder.png',
-                    ),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 7,
-                bottom: 7,
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.92),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.center_focus_weak_rounded,
-                    color: Color(0xFF4B5563),
-                    size: 24,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            price,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF111827),
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            '10 $unit (MOQ)',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF6B7280),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProducerInfo(Map<String, dynamic> business) {
-    final status = _verificationStatus(business);
-    final verified = status == 'verified';
-
-    return TapScale(
-      onTap: () {
-        final realBusiness = _businessByName(business['name'] as String?);
-        if (realBusiness == null) return;
-        Navigator.of(context).push(
-          buildPageRoute(BusinessDetailPage(business: realBusiness)),
-        );
-      },
-      borderRadius: BorderRadius.circular(8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-            ),
-            child: const Icon(
-              Icons.storefront_rounded,
-              color: Color(0xFFFF6B00),
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  business['name'] as String? ?? 'Produsen',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF111827),
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    if (verified) ...[
-                      const Text(
-                        'Verified',
-                        style: TextStyle(
-                          color: Color(0xFF0284C7),
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    const Expanded(
-                      child: Text(
-                        '16 thn · 40+ pekerja · 1,900+ m² · Rp2,1 M+',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Color(0xFF111827),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeroHeader(BuildContext context) {
-    final businesses = BusinessModel.instance.getAllBusinesses();
-    final productCount = filteredProducts.length;
-    final verifiedCount = _verifiedBusinessCount;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2563EB), Color(0xFF4F46E5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF2563EB).withOpacity(0.18),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.14),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Icon(Icons.storefront_rounded,
-                    color: Colors.white, size: 28),
-              ),
-              const SizedBox(width: 14),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'My Shop',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Temukan produk, toko, dan seller terverifikasi dalam satu tampilan modern.',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                  child: _heroStatCard(
-                      'Produk', '$productCount', Icons.inventory_2_rounded)),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: _heroStatCard(
-                      'Toko', '${businesses.length}', Icons.store_rounded)),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: _heroStatCard(
-                      'Verified', '$verifiedCount', Icons.verified_rounded)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _heroStatCard(String label, String value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: Colors.white, size: 18),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(Map<String, dynamic> business) {
-    final status = _verificationStatus(business);
-    final color = _verificationColor(status);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        _verificationLabel(status),
-        style:
-            TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
       ),
     );
   }
@@ -1301,7 +1012,7 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
         controller: _searchController,
         onChanged: _searchProducts,
         decoration: InputDecoration(
-          hintText: 'Cari produk, bisnis, atau kategori...',
+          hintText: 'Cari produk, toko, atau kategori...',
           prefixIcon: const Icon(Icons.search_rounded),
           suffixIcon: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1325,82 +1036,6 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
           border: InputBorder.none,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPromoBanner(BuildContext context) {
-    return TapScale(
-      onTap: () {
-        Navigator.of(context).push(
-          buildPageRoute(const PromoDetailPage()),
-        );
-      },
-      borderRadius: BorderRadius.circular(24),
-      child: Hero(
-        tag: 'promo-banner-hero',
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6C7BFF), Color(0xFF8F7CF8)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF6C7BFF).withOpacity(0.18),
-                  blurRadius: 22,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Promo Spesial Hari Ini',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Diskon hingga 50% untuk produk pilihan.\nBelanja lebih hemat sekarang!',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.16),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.local_offer_rounded,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );
@@ -1431,6 +1066,134 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
     );
   }
 
+  Widget _buildMarketplaceHeader(BuildContext context) {
+    final selectedAddress = AddressModel.instance.selectedAddress;
+    final locationName = _deliveryLocationText(selectedAddress);
+    final productCount = filteredProducts.length;
+
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              Navigator.of(context).push(
+                buildPageRoute(const MyAddressPage()),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Delivery to',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on_rounded,
+                        size: 17,
+                        color: Color(0xFF111827),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          locationName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFF111827),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '$productCount products available',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF94A3B8),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        _circleActionButton(
+          icon: Icons.notifications_none_rounded,
+          hasBadge: true,
+          onTap: () {},
+        ),
+        const SizedBox(width: 10),
+        _circleActionButton(
+          icon: Icons.search_rounded,
+          onTap: () => _showFilterSheet(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _circleActionButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    bool hasBadge = false,
+  }) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Material(
+          color: const Color(0xFFF0F2F6),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 52,
+              height: 52,
+              child: Icon(
+                icon,
+                color: const Color(0xFF111827),
+                size: 24,
+              ),
+            ),
+          ),
+        ),
+        if (hasBadge)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                color: Color(0xFFEF4444),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildCategoryItem({
     required BuildContext context,
     required int index,
@@ -1441,28 +1204,19 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
     return Padding(
       padding: const EdgeInsets.only(right: 12),
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(999),
         onTap: () {
           _filterByCategory(name);
-          showFakeNotification(
-            context,
-            'Kategori $name dipilih',
-            backgroundColor: const Color(0xFF2563EB),
-            icon: Icons.tune_rounded,
-          );
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOut,
-          width: 96,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          width: 84,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
           decoration: BoxDecoration(
-            color: isActive ? const Color(0xFF6C7BFF) : Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color:
-                  isActive ? const Color(0xFF6C7BFF) : const Color(0xFFE5E7EB),
-            ),
+            color: isActive ? const Color(0xFF111827) : Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.04),
@@ -1475,17 +1229,17 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 42,
-                height: 42,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: isActive
-                      ? Colors.white.withOpacity(0.18)
-                      : const Color(0xFFF8FAFC),
+                      ? Colors.white.withOpacity(0.14)
+                      : const Color(0xFFF3F4F6),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   icon,
-                  color: isActive ? Colors.white : const Color(0xFF6B7280),
+                  color: isActive ? Colors.white : const Color(0xFF111827),
                   size: 22,
                 ),
               ),
@@ -1506,6 +1260,51 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
         ),
       ),
     );
+  }
+
+  String _deliveryLocationText(Map<String, String>? address) {
+    if (address == null) return 'Tambah alamat utama';
+
+    final city = _compactLocationName(
+      (address['regency'] ?? address['city'] ?? '').trim(),
+    );
+    final label = (address['label'] ?? '').trim();
+    final addressLine = (address['address'] ?? '').trim();
+
+    if (city.isNotEmpty) return city;
+    if (label.isNotEmpty) return label;
+    if (addressLine.isNotEmpty) return addressLine;
+    return 'Tambah alamat utama';
+  }
+
+  String _compactLocationName(String value) {
+    if (value.isEmpty) return '';
+
+    final cleaned = value
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(
+          RegExp(r'^(Kota|Kabupaten|Kab\.|Kab)\s+', caseSensitive: false),
+          '',
+        )
+        .trim();
+
+    if (cleaned.isNotEmpty) {
+      return cleaned;
+    }
+
+    final parts = value.split(',');
+    if (parts.isNotEmpty) {
+      final firstPart = parts.first
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .replaceAll(
+            RegExp(r'^(Kota|Kabupaten|Kab\.|Kab)\s+', caseSensitive: false),
+            '',
+          )
+          .trim();
+      if (firstPart.isNotEmpty) return firstPart;
+    }
+
+    return value;
   }
 
   Widget _buildCartIcon() {
@@ -1566,11 +1365,6 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
     required bool isFavorite,
   }) {
     final isUserProduct = product['isUserProduct'] == true;
-    final businessName = product['businessName'] as String?;
-    final business = _businessByName(businessName);
-    final status = _verificationStatus(business);
-    final statusColor = _verificationColor(status);
-    final statusLabel = _verificationLabel(status);
 
     return TapScale(
       onTap: () {
@@ -1578,56 +1372,39 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
           buildPageRoute(ProductDetailPage(product: product)),
         );
       },
-      borderRadius: BorderRadius.circular(20),
-      child: Card(
-        elevation: 0,
-        color: Colors.white,
-        shadowColor: Colors.black12,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Padding(
           padding: const EdgeInsets.all(10),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Stack(
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(18),
                     child: AspectRatio(
-                      aspectRatio: 1.05,
+                      aspectRatio: 1,
                       child: ShopImage(
                         imagePath: imageUrl,
                         fit: BoxFit.cover,
                       ),
                     ),
                   ),
-                  if (isUserProduct)
-                    Positioned(
-                      top: 10,
-                      left: 10,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF111827).withOpacity(0.78),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Text(
-                          'Produk Kamu',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
                   Positioned(
-                    top: 6,
-                    right: 6,
+                    top: 8,
+                    right: 8,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1664,43 +1441,39 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
                                 ),
                               ),
                             ],
-                            icon: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: const Icon(
-                                Icons.more_vert_rounded,
+                            icon: const CircleAvatar(
+                              radius: 14,
+                              backgroundColor: Colors.white,
+                              child: Icon(
+                                Icons.more_horiz_rounded,
                                 size: 18,
                                 color: Color(0xFF374151),
                               ),
                             ),
                           ),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: IconButton(
-                            onPressed: () {
-                              setState(() {
-                                if (isFavorite) {
-                                  _favoriteIndexes.remove(index);
-                                } else {
-                                  _favoriteIndexes.add(index);
-                                }
-                              });
-                            },
-                            icon: Icon(
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              if (isFavorite) {
+                                _favoriteIndexes.remove(index);
+                              } else {
+                                _favoriteIndexes.add(index);
+                              }
+                            });
+                          },
+                          child: CircleAvatar(
+                            radius: 14,
+                            backgroundColor: Colors.white,
+                            child: Icon(
                               isFavorite
                                   ? Icons.favorite_rounded
                                   : Icons.favorite_border_rounded,
+                              size: 16,
                               color: isFavorite
                                   ? Colors.redAccent
-                                  : const Color(0xFF6B7280),
+                                  : const Color(0xFF111827),
                             ),
-                            visualDensity: VisualDensity.compact,
                           ),
                         ),
                       ],
@@ -1708,9 +1481,20 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Text(
                 name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF111827),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                price,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -1720,73 +1504,17 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
                 ),
               ),
               const SizedBox(height: 6),
-              if (businessName != null && businessName.isNotEmpty) ...[
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2FF),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    businessName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF4338CA),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: statusColor,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-              ],
               Text(
-                price,
+                _textValue(
+                  product['businessName'] ?? product['businessCity'],
+                  fallback: 'Popular item',
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF6C7BFF),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 7, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F7FF),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'Tap untuk detail',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF4B5563),
-                  ),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B7280),
                 ),
               ),
             ],
@@ -1905,6 +1633,29 @@ class _DashboardHomeTabState extends State<_DashboardHomeTab> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(Map<String, dynamic> business) {
+    final status = _verificationStatus(business);
+    final color = _verificationColor(status);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        _verificationLabel(status),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
         ),
       ),
     );

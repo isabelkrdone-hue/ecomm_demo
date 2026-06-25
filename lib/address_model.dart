@@ -7,22 +7,7 @@ class AddressModel extends ChangeNotifier {
 
   static final AddressModel instance = AddressModel._privateConstructor();
 
-  final List<Map<String, String>> _addresses = [
-    {
-      'label': 'Rumah',
-      'name': 'Isabel',
-      'phone': '+62 812-3456-7890',
-      'address': 'Jl. Mawar No. 12, Kel. Sukamaju, Kec. Cilandak',
-      'city': 'Jakarta Selatan, DKI Jakarta',
-    },
-    {
-      'label': 'Kantor',
-      'name': 'Isabel (Kantor)',
-      'phone': '+62 812-3456-7890',
-      'address': 'Gedung Graha Niaga Lt. 5, Jl. Sudirman No. 52',
-      'city': 'Jakarta Pusat, DKI Jakarta',
-    },
-  ];
+  final List<Map<String, String>> _addresses = [];
 
   int _selectedIndex = 0;
 
